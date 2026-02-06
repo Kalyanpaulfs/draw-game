@@ -54,21 +54,21 @@ export default function GameView({ room }: { room: Room }) {
             <WordSelector room={room} />
 
             {/* Top Bar */}
-            <div className="flex items-center justify-between bg-gray-800 p-4 rounded-xl mb-4 border border-gray-700 shadow-md">
-                <div className="flex items-center gap-4">
+            <div className="flex items-center justify-between bg-gray-800 p-2 md:p-4 rounded-xl mb-2 md:mb-4 border border-gray-700 shadow-md">
+                <div className="flex items-center gap-2 md:gap-4">
                     <TurnTimer timeLeft={timeLeft} />
                     <div>
-                        <div className="text-sm text-gray-400">Round {room.currentRound} / {room.config.rounds}</div>
-                        <div className="text-xl font-bold text-white">
-                            {isDrawer ? "🎨 IT'S YOUR TURN!" : `👀 ${drawerName} is drawing...`}
+                        <div className="text-xs md:text-sm text-gray-400">R {room.currentRound}/{room.config.rounds}</div>
+                        <div className="text-sm md:text-xl font-bold text-white leading-tight">
+                            {isDrawer ? "YOUR TURN!" : `${drawerName} drawing`}
                         </div>
                     </div>
                 </div>
 
                 <div className="text-right">
-                    {/* Word Display (Placeholder for Phase 4) */}
-                    <div className="text-2xl font-mono tracking-widest bg-gray-900 px-6 py-2 rounded-lg border border-gray-600">
-                        {isDrawer ? (room.turn.secretWord || "CHOOSING...") : "_ _ _ _ _"}
+                    {/* Word Display */}
+                    <div className="text-lg md:text-2xl font-mono tracking-widest bg-gray-900 px-3 py-1 md:px-6 md:py-2 rounded-lg border border-gray-600">
+                        {isDrawer ? (room.turn.secretWord || "...") : (room.turn.secretWord?.replace(/./g, "_ ") || "_ _ _")}
                     </div>
                 </div>
             </div>
@@ -197,16 +197,16 @@ export default function GameView({ room }: { room: Room }) {
                 </div>
 
                 {/* Right: Chat/Guesses */}
-                <div className="w-full md:w-80 h-48 md:h-auto bg-gray-800 rounded-xl border border-gray-700 flex flex-col shrink-0">
-                    <div className="p-2 md:p-3 border-b border-gray-700 font-bold bg-gray-750 text-sm md:text-base flex justify-between">
+                <div className="w-full md:w-80 h-32 md:h-auto bg-gray-800 rounded-xl border border-gray-700 flex flex-col shrink-0">
+                    <div className="p-2 md:p-3 border-b border-gray-700 font-bold bg-gray-750 text-xs md:text-base flex justify-between items-center">
                         <span>Chat</span>
                     </div>
-                    <div className="flex-1 p-2 md:p-4 overflow-y-auto space-y-2 min-h-0">
+                    <div className="flex-1 p-2 md:p-4 overflow-y-auto space-y-1 md:space-y-2 min-h-0">
                         {messages.length === 0 && (
-                            <div className="text-sm text-gray-400 italic text-center">Game started!</div>
+                            <div className="text-xs md:text-sm text-gray-400 italic text-center">Game started!</div>
                         )}
                         {messages.map((msg) => (
-                            <div key={msg.id} className={cn("text-sm", msg.isSystem ? "text-green-400 font-bold text-center my-1" : "text-white")}>
+                            <div key={msg.id} className={cn("text-xs md:text-sm", msg.isSystem ? "text-green-400 font-bold text-center my-1" : "text-white")}>
                                 {msg.isSystem ? (
                                     <span>🎉 {msg.text}</span>
                                 ) : (
@@ -224,8 +224,8 @@ export default function GameView({ room }: { room: Room }) {
                                 type="text"
                                 value={guess}
                                 onChange={(e) => setGuess(e.target.value)}
-                                placeholder="Type your guess..."
-                                className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                                placeholder="Type guess..."
+                                className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-purple-500 text-xs md:text-sm"
                                 disabled={isDrawer}
                             />
                         </form>
