@@ -22,7 +22,7 @@ export function useCanvas(roomId: string, userId: string, isDrawer: boolean) {
     const isDrawing = useRef(false);
     const currentStroke = useRef<Point[]>([]);
 
-    // Draw a single stroke on the canvas
+    // Draw a single stroke with smoothing
     const drawStroke = (ctx: CanvasRenderingContext2D, points: Point[], strokeColor: string, strokeSize: number) => {
         if (points.length < 2) return;
 
@@ -31,11 +31,32 @@ export function useCanvas(roomId: string, userId: string, isDrawer: boolean) {
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.beginPath();
+
+        // Move to first point
         ctx.moveTo(points[0].x * ctx.canvas.width, points[0].y * ctx.canvas.height);
 
-        for (let i = 1; i < points.length; i++) {
-            ctx.lineTo(points[i].x * ctx.canvas.width, points[i].y * ctx.canvas.height);
+        // Draw curves between points
+        for (let i = 1; i < points.length - 1; i++) {
+            const p1 = points[i];
+            const p2 = points[i + 1];
+
+            // Calculate midpoint
+            const midX = (p1.x + p2.x) / 2;
+            const midY = (p1.y + p2.y) / 2;
+
+            // Quadratic curve to midpoint using p1 as control point
+            ctx.quadraticCurveTo(
+                p1.x * ctx.canvas.width,
+                p1.y * ctx.canvas.height,
+                midX * ctx.canvas.width,
+                midY * ctx.canvas.height
+            );
         }
+
+        // Draw last line segment to the final point
+        const last = points[points.length - 1];
+        ctx.lineTo(last.x * ctx.canvas.width, last.y * ctx.canvas.height);
+
         ctx.stroke();
     };
 
@@ -90,8 +111,7 @@ export function useCanvas(roomId: string, userId: string, isDrawer: boolean) {
         const point = getPoint(e, canvasRef.current);
         if (!point) return;
 
-        // Draw locally immediately for responsiveness
-        // We draw from last point to current point
+        // Draw locally immediately
         const lastPoint = currentStroke.current[currentStroke.current.length - 1];
 
         ctx.strokeStyle = color;

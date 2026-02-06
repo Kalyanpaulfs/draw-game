@@ -188,8 +188,8 @@ export default function GameView({ room }: { room: Room }) {
                 <div className="flex-1 bg-white rounded-xl shadow-inner overflow-hidden relative border border-gray-600 touch-none">
                     <canvas
                         ref={canvasRef}
-                        width={800}
-                        height={600}
+                        width={1600}
+                        height={1200}
                         className="w-full h-full object-contain cursor-crosshair"
                         onMouseDown={startDrawing}
                         onMouseMove={draw}
