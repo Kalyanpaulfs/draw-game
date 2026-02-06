@@ -100,7 +100,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
                 </button>
             </header>
 
-            <main className="flex-1 p-6 flex flex-col items-center">
+            <main className="flex-1 p-2 md:p-6 flex flex-col items-center">
                 {room.status === "playing" ? (
                     <GameView room={room} />
                 ) : room.status === "finished" ? (

@@ -50,7 +50,7 @@ export default function GameView({ room }: { room: Room }) {
     if (!room.turn) return null;
 
     return (
-        <div className="w-full max-w-6xl mx-auto flex flex-col h-[calc(100vh-100px)] relative">
+        <div className="w-full max-w-6xl mx-auto flex flex-col h-[calc(100vh-20px)] md:h-[calc(100vh-100px)] relative p-2 md:p-0">
             <WordSelector room={room} />
 
             {/* Top Bar */}
@@ -73,7 +73,7 @@ export default function GameView({ room }: { room: Room }) {
                 </div>
             </div>
 
-            <div className="flex gap-4 flex-1 overflow-hidden">
+            <div className="flex flex-col md:flex-row gap-4 flex-1 overflow-hidden min-h-0">
                 {/* Left: Toolbar */}
                 <div className={cn(
                     "w-16 bg-gray-800 rounded-xl border border-gray-700 hidden md:flex flex-col items-center py-4 gap-4 transition-all",
@@ -151,6 +151,34 @@ export default function GameView({ room }: { room: Room }) {
                     </button>
                 </div>
 
+                {/* Mobile Toolbar (Horizontal) */}
+                <div className={cn(
+                    "flex md:hidden items-center justify-between bg-gray-800 p-2 rounded-xl border border-gray-700 gap-2 overflow-x-auto",
+                    !isDrawer && "opacity-50 pointer-events-none grayscale"
+                )}>
+                    {/* Players Score Trigger (Mobile) */}
+                    <div className="flex -space-x-2 mr-2">
+                        {Object.values(room.players).slice(0, 3).map(p => (
+                            <div key={p.id} className="w-8 h-8 rounded-full border border-gray-600 flex items-center justify-center bg-gray-700 text-xs">
+                                {p.avatar}
+                            </div>
+                        ))}
+                        {Object.keys(room.players).length > 3 && (
+                            <div className="w-8 h-8 rounded-full border border-gray-600 flex items-center justify-center bg-gray-800 text-xs">+{Object.keys(room.players).length - 3}</div>
+                        )}
+                    </div>
+
+                    <div className="h-8 w-px bg-gray-700 mx-1" />
+
+                    <div className="flex gap-2">
+                        {["#000000", "#EF4444", "#3B82F6", "#22C55E"].map((c) => (
+                            <div key={c} onClick={() => setColor(c)} className={cn("w-6 h-6 rounded-full border", color === c ? "border-white scale-110" : "border-gray-600")} style={{ backgroundColor: c }} />
+                        ))}
+                    </div>
+                    <div className="h-8 w-px bg-gray-700 mx-1" />
+                    <button onClick={clearBoard} className="text-xl">🗑️</button>
+                </div>
+
                 {/* Center: Canvas Area */}
                 <div className="flex-1 bg-white rounded-xl shadow-inner overflow-hidden relative border border-gray-600 touch-none">
                     <canvas
@@ -169,9 +197,11 @@ export default function GameView({ room }: { room: Room }) {
                 </div>
 
                 {/* Right: Chat/Guesses */}
-                <div className="w-80 bg-gray-800 rounded-xl border border-gray-700 flex flex-col">
-                    <div className="p-3 border-b border-gray-700 font-bold bg-gray-750">Chat</div>
-                    <div className="flex-1 p-4 overflow-y-auto space-y-2 max-h-[400px]">
+                <div className="w-full md:w-80 h-48 md:h-auto bg-gray-800 rounded-xl border border-gray-700 flex flex-col shrink-0">
+                    <div className="p-2 md:p-3 border-b border-gray-700 font-bold bg-gray-750 text-sm md:text-base flex justify-between">
+                        <span>Chat</span>
+                    </div>
+                    <div className="flex-1 p-2 md:p-4 overflow-y-auto space-y-2 min-h-0">
                         {messages.length === 0 && (
                             <div className="text-sm text-gray-400 italic text-center">Game started!</div>
                         )}
@@ -188,14 +218,14 @@ export default function GameView({ room }: { room: Room }) {
                             </div>
                         ))}
                     </div>
-                    <div className="p-3 border-t border-gray-700">
+                    <div className="p-2 md:p-3 border-t border-gray-700">
                         <form onSubmit={handleGuess}>
                             <input
                                 type="text"
                                 value={guess}
                                 onChange={(e) => setGuess(e.target.value)}
                                 placeholder="Type your guess..."
-                                className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-purple-500"
+                                className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                                 disabled={isDrawer}
                             />
                         </form>
