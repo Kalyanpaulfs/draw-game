@@ -187,8 +187,12 @@ function getPoint(e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElem
         clientY = (e as React.MouseEvent).clientY;
     }
 
+    const x = (clientX - rect.left) / rect.width;
+    const y = (clientY - rect.top) / rect.height;
+
+    // Clamp to 0-1 to prevent drawing outside implicitly or weird scaling issues
     return {
-        x: (clientX - rect.left) / rect.width,
-        y: (clientY - rect.top) / rect.height,
+        x: Math.max(0, Math.min(1, x)),
+        y: Math.max(0, Math.min(1, y)),
     };
 }
