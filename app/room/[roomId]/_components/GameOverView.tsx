@@ -79,16 +79,27 @@ export default function GameOverView({ room }: { room: Room }) {
             )}
 
             {/* Controls */}
-            {room.hostId === userId ? (
-                <button
-                    onClick={handleReset}
-                    className="px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl font-bold text-xl shadow-lg hover:scale-105 transition-transform"
+            <div className="flex flex-col gap-4 items-center">
+                {room.hostId === userId ? (
+                    <button
+                        onClick={handleReset}
+                        className="px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl font-bold text-xl shadow-lg hover:scale-105 transition-transform flex items-center gap-2"
+                    >
+                        <span>🔄</span> Start New Game
+                    </button>
+                ) : (
+                    <div className="text-gray-400 animate-pulse bg-gray-800 px-4 py-2 rounded-lg border border-gray-700">
+                        Waiting for host <span className="text-white font-bold">{room.players[room.hostId]?.name || "Unknown"}</span> to restart...
+                    </div>
+                )}
+
+                <a
+                    href="/"
+                    className="text-gray-500 hover:text-white hover:underline transition-colors text-sm"
                 >
-                    Play Again 🔄
-                </button>
-            ) : (
-                <div className="text-gray-400 animate-pulse">Waiting for host to restart...</div>
-            )}
+                    Leave Room
+                </a>
+            </div>
         </div>
     );
 }
