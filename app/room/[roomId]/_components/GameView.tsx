@@ -37,8 +37,6 @@ export default function GameView({ room }: { room: Room }) {
         e.preventDefault();
         if (!guess.trim()) return;
 
-        // Optimistic UI or wait? Best to wait for real-time update in MVP
-        // But we should clear the input
         try {
             await submitGuess(room.roomId, userId, userName || "Anon", guess);
             setGuess("");
@@ -50,147 +48,53 @@ export default function GameView({ room }: { room: Room }) {
     if (!room.turn) return null;
 
     return (
-        <div className="w-full max-w-6xl mx-auto flex flex-col h-[calc(100vh-20px)] md:h-[calc(100vh-100px)] relative p-2 md:p-0">
+        <div className="w-full h-[100dvh] flex flex-col bg-[#1a56db] overflow-hidden font-sans select-none touch-none">
             <WordSelector room={room} />
 
-            {/* Top Bar */}
-            <div className="flex items-center justify-between bg-gray-800 p-2 md:p-4 rounded-xl mb-2 md:mb-4 border border-gray-700 shadow-md">
-                <div className="flex items-center gap-2 md:gap-4">
-                    <TurnTimer timeLeft={timeLeft} />
-                    <div>
-                        <div className="text-xs md:text-sm text-gray-400">R {room.currentRound}/{room.config.rounds}</div>
-                        <div className="text-sm md:text-xl font-bold text-white leading-tight">
-                            {isDrawer ? "YOUR TURN!" : `${drawerName} drawing`}
+            {/* Classic Header */}
+            <div className="h-14 shrink-0 flex items-center justify-between px-3 gap-2 bg-[#1a56db] relative z-20">
+                {/* Left: Timer & Icons */}
+                <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-full bg-white border-2 border-slate-900 flex items-center justify-center font-bold text-xl text-slate-900 shadow-sm relative overflow-hidden">
+                        <div className="absolute inset-0 bg-slate-200 h-full" style={{ top: `${(1 - timeLeft / room.config.turnDuration) * 100}%` }}></div>
+                        <span className="relative z-10">{timeLeft}</span>
+                    </div>
+                </div>
+
+                {/* Center: Word */}
+                <div className="flex-1 flex justify-center">
+                    <div className="bg-[#f0e68c] px-4 py-1 rounded border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,0.2)] flex gap-2 items-center min-w-[120px] justify-center">
+                        <span className="font-mono text-lg font-bold tracking-[0.2em] text-slate-900 uppercase">
+                            {(() => {
+                                if (room.turn?.phase === "choosing_difficulty") return "WAITING";
+                                if (room.turn?.phase === "choosing_word") return "CHOOSING";
+                                if (isDrawer) return room.turn?.secretWord || "...";
+                                return room.turn?.secretWord?.replace(/./g, "_") || "____";
+                            })()}
+                        </span>
+                        <div className="bg-yellow-100 text-[10px] font-bold px-1 rounded border border-yellow-600 text-yellow-800">
+                            {room.turn?.secretWord?.length || 0}
                         </div>
                     </div>
                 </div>
 
-                <div className="text-right">
-                    {/* Word Display */}
-                    <div className="text-lg md:text-2xl font-mono tracking-widest bg-gray-900 px-3 py-1 md:px-6 md:py-2 rounded-lg border border-gray-600">
-                        {(() => {
-                            if (room.turn?.phase === "choosing_difficulty") return "DIFFICULTY...";
-                            if (room.turn?.phase === "choosing_word") return "WORD...";
-                            if (isDrawer) return room.turn?.secretWord || "...";
-                            return room.turn?.secretWord?.replace(/./g, "_ ") || "_ _ _";
-                        })()}
+                {/* Right: Round & Icons */}
+                <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-full bg-white border-2 border-slate-900 flex flex-col items-center justify-center text-[8px] font-bold text-slate-900 shadow-sm leading-tight">
+                        <span>RND</span>
+                        <span className="text-sm">{room.currentRound}/{room.config.rounds}</span>
                     </div>
                 </div>
             </div>
 
-            <div className="flex flex-col md:flex-row gap-4 flex-1 overflow-hidden min-h-0">
-                {/* Left: Toolbar */}
-                <div className={cn(
-                    "w-16 bg-gray-800 rounded-xl border border-gray-700 hidden md:flex flex-col items-center py-4 gap-4 transition-all",
-                    !isDrawer && "opacity-50 pointer-events-none grayscale"
-                )}>
-                    {/* Players Scoreboard (Icon Trigger or Mini-list?) */}
-                    {/* Let's put scores above the tools for now, or maybe make the sidebar wider? */}
-                    {/* Actually, the plan was "Players list on the left side". 
-                        The current toolbar is w-16. Let's make a dedicated column if space permits, 
-                        or just list avatars with scores.
-                     */}
-                    <div className="flex flex-col gap-2 w-full px-1 mb-4">
-                        {Object.values(room.players)
-                            .sort((a, b) => b.score - a.score)
-                            .map((p) => (
-                                <div key={p.id} className="relative group flex justify-center cursor-help">
-                                    <div className={cn(
-                                        "w-10 h-10 rounded-full flex items-center justify-center text-lg border-2",
-                                        p.id === room.turn?.drawerId ? "border-yellow-400" : "border-gray-600",
-                                        room.turn?.correctGuessers?.includes(p.id) ? "bg-green-600 border-green-400" : "bg-gray-700"
-                                    )}>
-                                        {p.avatar}
-                                    </div>
-                                    {/* Tooltip for Name & Score */}
-                                    <div className="absolute left-12 top-0 bg-black/90 p-2 rounded text-xs whitespace-nowrap hidden group-hover:block z-50">
-                                        <div className="font-bold text-white">{p.name}</div>
-                                        <div className="text-yellow-400">{p.score} pts</div>
-                                    </div>
-                                    <div className="absolute -bottom-1 -right-1 bg-gray-900 text-[10px] px-1 rounded-full text-white border border-gray-700">
-                                        {p.score}
-                                    </div>
-                                </div>
-                            ))}
-                    </div>
-
-                    <div className="h-px w-10 bg-gray-700 my-2" />
-
-                    {/* Colors */}
-                    {["#000000", "#EF4444", "#3B82F6", "#22C55E", "#EAB308"].map((c) => (
-                        <div
-                            key={c}
-                            onClick={() => setColor(c)}
-                            className={cn(
-                                "w-8 h-8 rounded-full border-2 cursor-pointer hover:scale-110 transition-transform",
-                                color === c ? "border-white scale-110 shadow-lg" : "border-gray-600"
-                            )}
-                            style={{ backgroundColor: c }}
-                        />
-                    ))}
-
-                    <div className="h-px w-10 bg-gray-700 my-2" />
-
-                    {/* Sizes */}
-                    {[3, 6, 12].map((s) => (
-                        <div
-                            key={s}
-                            onClick={() => setSize(s)}
-                            className={cn(
-                                "rounded-full bg-gray-400 cursor-pointer hover:bg-white transition-colors",
-                                size === s ? "bg-white shadow-lg" : ""
-                            )}
-                            style={{ width: s * 1.5 + 10, height: s * 1.5 + 10 }}
-                        />
-                    ))}
-
-                    <div className="h-px w-10 bg-gray-700 my-2" />
-
-                    {/* Clear */}
-                    <button
-                        onClick={clearBoard}
-                        className="p-2 text-gray-400 hover:text-red-400 transition-colors"
-                        title="Clear Board"
-                    >
-                        🗑️
-                    </button>
-                </div>
-
-                {/* Mobile Toolbar (Horizontal) */}
-                <div className={cn(
-                    "flex md:hidden items-center justify-between bg-gray-800 p-2 rounded-xl border border-gray-700 gap-2 overflow-x-auto",
-                    !isDrawer && "opacity-50 pointer-events-none grayscale"
-                )}>
-                    {/* Players Score Trigger (Mobile) */}
-                    <div className="flex -space-x-2 mr-2">
-                        {Object.values(room.players).slice(0, 3).map(p => (
-                            <div key={p.id} className="w-8 h-8 rounded-full border border-gray-600 flex items-center justify-center bg-gray-700 text-xs">
-                                {p.avatar}
-                            </div>
-                        ))}
-                        {Object.keys(room.players).length > 3 && (
-                            <div className="w-8 h-8 rounded-full border border-gray-600 flex items-center justify-center bg-gray-800 text-xs">+{Object.keys(room.players).length - 3}</div>
-                        )}
-                    </div>
-
-                    <div className="h-8 w-px bg-gray-700 mx-1" />
-
-                    <div className="flex gap-2">
-                        {["#000000", "#EF4444", "#3B82F6", "#22C55E"].map((c) => (
-                            <div key={c} onClick={() => setColor(c)} className={cn("w-6 h-6 rounded-full border", color === c ? "border-white scale-110" : "border-gray-600")} style={{ backgroundColor: c }} />
-                        ))}
-                    </div>
-                    <div className="h-8 w-px bg-gray-700 mx-1" />
-                    <button onClick={clearBoard} className="text-xl">🗑️</button>
-                </div>
-
-                {/* Center: Canvas Area */}
-                <div className="flex-1 bg-white rounded-xl shadow-inner overflow-hidden relative border border-gray-600 touch-none">
+            {/* Main Content: Canvas */}
+            <div className="flex-1 flex flex-col items-center justify-start p-2 min-h-0 bg-[#3b72f0]/30 relative">
+                <div className="bg-white rounded-lg shadow-xl border-[4px] border-slate-900/10 overflow-hidden w-full max-w-lg aspect-square relative flex items-center justify-center">
                     <canvas
                         ref={canvasRef}
-                        width={1600}
+                        width={1200}
                         height={1200}
-                        className="w-full h-full object-contain cursor-crosshair"
+                        className="w-full h-full object-contain cursor-crosshair touch-none"
                         onMouseDown={startDrawing}
                         onMouseMove={draw}
                         onMouseUp={stopDrawing}
@@ -199,43 +103,73 @@ export default function GameView({ room }: { room: Room }) {
                         onTouchMove={draw}
                         onTouchEnd={stopDrawing}
                     />
+
+                    {/* Drawer Toolbar Overlay */}
+                    {isDrawer && (
+                        <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-100/90 backdrop-blur rounded-full border border-slate-300 shadow-lg p-2 flex gap-3 items-center scale-90 origin-top">
+                            {["#000000", "#EF4444", "#3B82F6", "#22C55E", "#EAB308"].map((c) => (
+                                <div key={c} onClick={() => setColor(c)} className={cn("w-6 h-6 rounded-full border border-black/10 cursor-pointer hover:scale-110 transition-transform", color === c ? "ring-2 ring-black scale-110" : "")} style={{ backgroundColor: c }} />
+                            ))}
+                            <div className="w-px h-5 bg-slate-300"></div>
+                            <button onClick={clearBoard} className="text-sm bg-white p-1 rounded hover:bg-red-50 text-red-500 border border-slate-200">🗑️</button>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Bottom Panel: Players & Chat */}
+            <div className="h-[35%] shrink-0 bg-[#1a56db] p-2 pt-0 flex gap-2">
+
+                {/* Left: Players */}
+                <div className="w-5/12 bg-white rounded-t-lg border-2 border-b-0 border-slate-900 overflow-hidden flex flex-col">
+                    <div className="bg-slate-100 p-1 border-b border-slate-200 text-center text-[10px] font-bold uppercase text-slate-500">Players</div>
+                    <div className="flex-1 overflow-y-auto p-1 space-y-1">
+                        {Object.values(room.players)
+                            .sort((a, b) => b.score - a.score)
+                            .map((p, i) => (
+                                <div key={p.id} className={cn(
+                                    "flex items-center p-1 rounded border shadow-sm relative pr-6",
+                                    p.id === room.turn?.drawerId ? "bg-orange-50 border-orange-200" : "bg-white border-slate-100"
+                                )}>
+                                    <div className="text-lg mr-1">{p.avatar}</div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className={cn("text-[11px] font-bold truncate leading-tight", p.id === userId ? "text-blue-600" : "text-slate-900")}>{p.name}</div>
+                                        <div className="text-[9px] text-slate-500 font-bold leading-tight">{p.score}</div>
+                                    </div>
+                                    <div className="absolute top-1 right-1 text-[9px] font-black text-slate-300">#{i + 1}</div>
+                                    {isDrawer && p.id === room.turn?.drawerId && <div className="absolute right-1 bottom-1 text-[10px]">✏️</div>}
+                                </div>
+                            ))}
+                    </div>
                 </div>
 
-                {/* Right: Chat/Guesses */}
-                <div className="w-full md:w-80 h-32 md:h-auto bg-gray-800 rounded-xl border border-gray-700 flex flex-col shrink-0">
-                    <div className="p-2 md:p-3 border-b border-gray-700 font-bold bg-gray-750 text-xs md:text-base flex justify-between items-center">
-                        <span>Chat</span>
-                    </div>
-                    <div className="flex-1 p-2 md:p-4 overflow-y-auto space-y-1 md:space-y-2 min-h-0">
-                        {messages.length === 0 && (
-                            <div className="text-xs md:text-sm text-gray-400 italic text-center">Game started!</div>
-                        )}
+                {/* Right: Chat */}
+                <div className="w-7/12 bg-white rounded-t-lg border-2 border-b-0 border-slate-900 flex flex-col overflow-hidden">
+                    <div className="flex-1 overflow-y-auto p-2 space-y-1 bg-slate-50 text-xs">
                         {messages.map((msg) => (
-                            <div key={msg.id} className={cn("text-xs md:text-sm", msg.isSystem ? "text-green-400 font-bold text-center my-1" : "text-white")}>
-                                {msg.isSystem ? (
-                                    <span>🎉 {msg.text}</span>
-                                ) : (
-                                    <span>
-                                        <span className="font-bold text-gray-400">{msg.userName}: </span>
-                                        {msg.text}
-                                    </span>
-                                )}
+                            <div key={msg.id} className={cn(
+                                "leading-tight break-words",
+                                msg.isSystem ? (msg.text.includes("guessed") ? "text-green-600 font-bold bg-green-50 p-1 rounded" : "text-blue-600 font-bold text-center my-1") : "text-slate-800"
+                            )}>
+                                {!msg.isSystem && <span className="font-bold text-slate-900">{msg.userName}: </span>}
+                                {msg.text}
                             </div>
                         ))}
                     </div>
-                    <div className="p-2 md:p-3 border-t border-gray-700">
-                        <form onSubmit={handleGuess}>
+                    <div className="p-2 border-t border-slate-200 bg-white">
+                        <form onSubmit={handleGuess} className="flex gap-1">
                             <input
                                 type="text"
                                 value={guess}
                                 onChange={(e) => setGuess(e.target.value)}
-                                placeholder="Type guess..."
-                                className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white outline-none focus:ring-2 focus:ring-purple-500 text-xs md:text-sm"
+                                placeholder={isDrawer ? "It's your turn!" : "Type guess here..."}
+                                className="w-full bg-slate-100 border border-slate-300 rounded px-2 py-1 text-xs outline-none focus:border-blue-500 focus:bg-white transition-colors"
                                 disabled={isDrawer}
                             />
                         </form>
                     </div>
                 </div>
+
             </div>
         </div>
     );
