@@ -50,7 +50,7 @@ export default function GameView({ room }: { room: Room }) {
     const totalDuration = room.turn?.phase === "drawing" ? 60 : 15;
 
     return (
-        <div className="w-full h-[100dvh] flex flex-col bg-[#1a56db] overflow-hidden font-sans select-none touch-none">
+        <div className="w-full h-[100dvh] flex flex-col bg-[#1a56db] overflow-hidden font-sans select-none">
             <WordSelector room={room} />
 
             {/* Classic Header */}
@@ -90,8 +90,8 @@ export default function GameView({ room }: { room: Room }) {
             </div>
 
             {/* Main Content: Canvas */}
-            <div className="flex-1 flex flex-col items-center justify-start p-2 min-h-0 bg-[#3b72f0]/30 relative">
-                <div className="bg-white rounded-lg shadow-xl border-[4px] border-slate-900/10 overflow-hidden w-full max-w-lg aspect-square relative flex items-center justify-center">
+            <div className="flex-1 flex flex-col items-center justify-start p-2 min-h-0 bg-[#3b72f0]/30 relative overflow-y-auto">
+                <div className="bg-white rounded-lg shadow-xl border-[4px] border-slate-900/10 overflow-hidden w-full max-w-lg aspect-square relative flex items-center justify-center shrink-0">
                     <canvas
                         ref={canvasRef}
                         width={1200}
@@ -106,9 +106,22 @@ export default function GameView({ room }: { room: Room }) {
                         onTouchEnd={stopDrawing}
                     />
 
+                    {/* Choosing Word Overlay */}
+                    {room.turn?.phase === "choosing_word" && !isDrawer && (
+                        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-start pt-10 z-10">
+                            <div className="bg-white p-4 rounded-xl border-4 border-slate-900 shadow-2xl flex flex-col items-center gap-2 animate-bounce-in">
+                                <span className="text-6xl">{room.players[room.turn.drawerId]?.avatar}</span>
+                                <div className="text-center">
+                                    <div className="font-black text-xl text-slate-900">{drawerName}</div>
+                                    <div className="font-bold text-slate-500 text-sm">is choosing a word...</div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Drawer Toolbar Overlay */}
-                    {isDrawer && (
-                        <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-100/90 backdrop-blur rounded-full border border-slate-300 shadow-lg p-2 flex gap-3 items-center scale-90 origin-top">
+                    {isDrawer && room.turn?.phase === "drawing" && (
+                        <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-100/90 backdrop-blur rounded-full border border-slate-300 shadow-lg p-2 flex gap-3 items-center scale-90 origin-top z-20">
                             {["#000000", "#EF4444", "#3B82F6", "#22C55E", "#EAB308"].map((c) => (
                                 <div key={c} onClick={() => setColor(c)} className={cn("w-6 h-6 rounded-full border border-black/10 cursor-pointer hover:scale-110 transition-transform", color === c ? "ring-2 ring-black scale-110" : "")} style={{ backgroundColor: c }} />
                             ))}
