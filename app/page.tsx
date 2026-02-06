@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/hooks/useUser";
 import { createRoom, joinRoom } from "@/lib/room-actions";
@@ -17,6 +17,11 @@ export default function Home() {
   const [players, setPlayers] = useState(4);
   const [rounds, setRounds] = useState(3);
   const [isPublic, setIsPublic] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +39,7 @@ export default function Home() {
         isPublic,
       });
       router.push(`/room/${id}`);
-    } catch (err: any) {
+    } catch (err) {
       setError("Failed to create room. Firebase config might be missing.");
       console.error(err);
     } finally {
@@ -62,7 +67,7 @@ export default function Home() {
       } else {
         setError(res.message || "Failed to join room");
       }
-    } catch (err: any) {
+    } catch (err) {
       setError("Failed to join room. Check connection.");
       console.error(err);
     } finally {
@@ -71,127 +76,156 @@ export default function Home() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
-      <div className="w-full max-w-md space-y-8">
-        <div className="text-center">
-          <h1 className="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
-            Draw & Guess
+    <main className="min-h-screen relative flex items-center justify-center overflow-hidden bg-slate-950 text-slate-200 selection:bg-indigo-500/30">
+      {/* Background Ambience */}
+      <div className="absolute inset-0 z-0 pointer-events-none">
+        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_0%,rgba(120,119,198,0.1),transparent_50%)]"></div>
+        <div className="absolute bottom-0 right-0 w-[800px] h-[600px] bg-[radial-gradient(circle_at_100%_100%,rgba(76,29,149,0.05),transparent_60%)]"></div>
+      </div>
+
+      <div className={cn(
+        "relative z-10 w-full max-w-lg p-6 transition-all duration-1000 ease-out",
+        mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
+      )}>
+        {/* Header */}
+        <div className="text-center mb-12 space-y-2">
+          <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-white drop-shadow-sm">
+            Draw<span className="text-indigo-500">.</span>io
           </h1>
-          <p className="mt-2 text-gray-400">Real-time multiplayer drawing game</p>
+          <p className="text-slate-500 font-medium tracking-wide text-sm uppercase opacity-80">
+            Premium Real-Time Collaboration
+          </p>
         </div>
 
-        <div className="bg-gray-800 p-6 rounded-xl shadow-2xl border border-gray-700">
-          <div className="flex mb-6 bg-gray-700 rounded-lg p-1">
+        {/* Minimalist Card */}
+        <div className="backdrop-blur-3xl bg-slate-900/50 border border-white/5 rounded-3xl p-8 shadow-2xl shadow-black/50 ring-1 ring-white/5">
+
+          {/* Tab Switcher */}
+          <div className="flex p-1 bg-black/20 rounded-xl mb-8 border border-white/5">
             <button
               onClick={() => setActiveTab("create")}
               className={cn(
-                "flex-1 py-2 text-sm font-medium rounded-md transition-all",
-                activeTab === "create" ? "bg-gray-600 text-white shadow" : "text-gray-400 hover:text-white"
+                "flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all duration-300",
+                activeTab === "create" ? "bg-white/10 text-white shadow-inner" : "text-slate-500 hover:text-slate-300"
               )}
             >
-              Create Game
+              Create
             </button>
             <button
               onClick={() => setActiveTab("join")}
               className={cn(
-                "flex-1 py-2 text-sm font-medium rounded-md transition-all",
-                activeTab === "join" ? "bg-gray-600 text-white shadow" : "text-gray-400 hover:text-white"
+                "flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all duration-300",
+                activeTab === "join" ? "bg-white/10 text-white shadow-inner" : "text-slate-500 hover:text-slate-300"
               )}
             >
-              Join Game
+              Join
             </button>
           </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Your Name</label>
+          <div className="space-y-6">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Identity</label>
               <input
                 type="text"
                 value={userName}
                 onChange={(e) => saveName(e.target.value)}
-                placeholder="Enter your nickname"
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 text-white outline-none"
+                placeholder="Enter your name"
+                className="w-full bg-transparent border-b border-white/10 px-4 py-3 text-lg font-medium text-white placeholder-slate-600 focus:border-indigo-500 focus:outline-none transition-colors"
               />
             </div>
 
-            {activeTab === "create" ? (
-              <form onSubmit={handleCreate} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">Max Players</label>
-                    <input
-                      type="number"
-                      min={2}
-                      max={10}
-                      value={players}
-                      onChange={(e) => setPlayers(Number(e.target.value))}
-                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 text-white outline-none"
-                    />
+            <div className="min-h-[220px]">
+              {activeTab === "create" ? (
+                <form onSubmit={handleCreate} className="space-y-6 animate-fadeIn">
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Players</label>
+                      <div className="relative">
+                        <select
+                          value={players}
+                          onChange={(e) => setPlayers(Number(e.target.value))}
+                          className="w-full bg-slate-800/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none appearance-none cursor-pointer hover:bg-slate-800 transition-colors"
+                        >
+                          {[2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => <option key={n} value={n} className="bg-slate-900">{n}</option>)}
+                        </select>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">↓</div>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Rounds</label>
+                      <div className="relative">
+                        <select
+                          value={rounds}
+                          onChange={(e) => setRounds(Number(e.target.value))}
+                          className="w-full bg-slate-800/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none appearance-none cursor-pointer hover:bg-slate-800 transition-colors"
+                        >
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => <option key={n} value={n} className="bg-slate-900">{n}</option>)}
+                        </select>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">↓</div>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">Rounds</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={10}
-                      value={rounds}
-                      onChange={(e) => setRounds(Number(e.target.value))}
-                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 text-white outline-none"
-                    />
-                  </div>
-                </div>
 
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="public"
-                    checked={isPublic}
-                    onChange={(e) => setIsPublic(e.target.checked)}
-                    className="w-4 h-4 text-purple-600 bg-gray-700 border-gray-600 rounded focus:ring-purple-500"
-                  />
-                  <label htmlFor="public" className="ml-2 text-sm text-gray-300">
-                    Public Room
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <div className={cn(
+                      "w-5 h-5 rounded border flex items-center justify-center transition-all",
+                      isPublic ? "bg-indigo-500 border-indigo-500" : "border-slate-600 group-hover:border-slate-400"
+                    )}>
+                      {isPublic && <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                    </div>
+                    <input type="checkbox" className="hidden" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />
+                    <span className="text-sm font-medium text-slate-400 group-hover:text-slate-200 transition-colors">Public Room</span>
                   </label>
-                </div>
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 rounded-lg font-bold text-white transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? "Creating..." : "Create Room"}
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={handleJoin} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Room Code</label>
-                  <input
-                    type="text"
-                    value={roomId}
-                    onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-                    placeholder="ABCD"
-                    maxLength={4}
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 text-white outline-none uppercase tracking-widest"
-                  />
-                </div>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-4 bg-white text-black rounded-xl font-bold text-base hover:bg-slate-200 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)]"
+                  >
+                    {loading ? "Initializing..." : "Create Sanctuary"}
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleJoin} className="space-y-8 animate-fadeIn">
+                  <div className="space-y-1 pt-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Access Code</label>
+                    <input
+                      type="text"
+                      value={roomId}
+                      onChange={(e) => setRoomId(e.target.value.toUpperCase())}
+                      placeholder="ABCD"
+                      maxLength={4}
+                      className="w-full bg-transparent border-b border-white/10 px-4 py-3 text-3xl font-mono text-center tracking-[0.5em] text-white placeholder-slate-700 focus:border-indigo-500 focus:outline-none transition-colors uppercase"
+                    />
+                  </div>
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-3 bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 rounded-lg font-bold text-white transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? "Joining..." : "Join Game"}
-                </button>
-              </form>
-            )}
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-base hover:bg-indigo-500 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:shadow-[0_0_25px_rgba(79,70,229,0.5)]"
+                  >
+                    {loading ? "Connecting..." : "Enter Void"}
+                  </button>
+                </form>
+              )}
+            </div>
 
             {error && (
-              <div className="p-3 bg-red-900/50 border border-red-700 text-red-200 rounded-lg text-sm text-center">
-                {error}
+              <div className="text-center">
+                <span className="text-xs font-bold text-rose-500 bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20">
+                  {error}
+                </span>
               </div>
             )}
+
           </div>
+        </div>
+
+        <div className="mt-12 flex justify-center gap-6 opacity-30 grayscale hover:grayscale-0 transition-all duration-500">
+          {/* Simple footer decorations or brand logos could go here */}
+          <div className="h-1 w-1 bg-white rounded-full"></div>
+          <div className="h-1 w-1 bg-white rounded-full"></div>
+          <div className="h-1 w-1 bg-white rounded-full"></div>
         </div>
       </div>
     </main>

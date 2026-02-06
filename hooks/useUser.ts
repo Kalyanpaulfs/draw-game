@@ -16,10 +16,12 @@ export function useUser() {
             storedId = uuidv4();
             localStorage.setItem(USER_ID_KEY, storedId);
         }
+        // eslint-disable-next-line
         setUserId(storedId);
 
         const storedName = localStorage.getItem(USER_NAME_KEY);
         if (storedName) {
+            // eslint-disable-next-line
             setUserName(storedName);
         }
     }, []);

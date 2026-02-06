@@ -4,6 +4,7 @@ import { Room } from "@/lib/types";
 import { resetGame } from "@/lib/room-actions";
 import { useUser } from "@/hooks/useUser";
 import { cn } from "@/lib/game-utils";
+import Link from "next/link";
 
 export default function GameOverView({ room }: { room: Room }) {
     const { userId } = useUser();
@@ -93,12 +94,12 @@ export default function GameOverView({ room }: { room: Room }) {
                     </div>
                 )}
 
-                <a
+                <Link
                     href="/"
                     className="text-gray-500 hover:text-white hover:underline transition-colors text-sm"
                 >
                     Leave Room
-                </a>
+                </Link>
             </div>
         </div>
     );

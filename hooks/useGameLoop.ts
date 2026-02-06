@@ -9,6 +9,7 @@ export function useGameLoop(room: Room | null, userId: string) {
 
     useEffect(() => {
         if (!room || room.status !== "playing" || !room.turn) {
+            // eslint-disable-next-line
             setTimeLeft(0);
             return;
         }

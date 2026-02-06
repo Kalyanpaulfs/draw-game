@@ -85,8 +85,8 @@ export async function joinRoom(roomId: string, userId: string, userName: string)
             transaction.update(roomRef, { players });
         });
         return { success: true };
-    } catch (e: any) {
-        return { success: false, message: e.toString() || "Failed to join" };
+    } catch (e) {
+        return { success: false, message: String(e) || "Failed to join" };
     }
 }
 
@@ -270,7 +270,7 @@ export async function submitGuess(roomId: string, userId: string, userName: stri
             const drawerScore = room.players[room.turn.drawerId]?.score || 0;
             const newCorrectGuessers = [...(room.turn.correctGuessers || []), userId];
 
-            const updates: any = {
+            const updates = {
                 [`players.${userId}.score`]: currentScore + points,
                 [`players.${room.turn.drawerId}.score`]: drawerScore + drawerPoints,
                 "turn.correctGuessers": newCorrectGuessers
@@ -279,7 +279,7 @@ export async function submitGuess(roomId: string, userId: string, userName: stri
             // Check for early round end
             const otherPlayers = Object.values(room.players).filter(p => p.id !== room.turn?.drawerId && p.isOnline);
             if (newCorrectGuessers.length >= otherPlayers.length) {
-                // All guessed! Shorten deadline to 3s
+                // @ts-expect-error: Inferred type mismatch
                 updates["turn.deadline"] = Timestamp.fromMillis(Date.now() + 3000);
 
                 // Add immediate system message about round ending
@@ -323,7 +323,7 @@ export async function resetGame(roomId: string) {
         if (!roomSnap.exists()) throw "Room not found";
         const room = roomSnap.data() as Room;
 
-        const updates: any = {
+        const updates = {
             status: "waiting",
             currentRound: 1,
             turn: null,
@@ -333,6 +333,7 @@ export async function resetGame(roomId: string) {
 
         // Reset scores
         Object.keys(room.players).forEach(pid => {
+            // @ts-expect-error: Inferred type mismatch
             updates[`players.${pid}.score`] = 0;
         });
 
