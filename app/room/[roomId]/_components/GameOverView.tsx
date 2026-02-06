@@ -89,7 +89,7 @@ export default function GameOverView({ room }: { room: Room }) {
             )}
 
             {/* Controls */}
-            <div className="flex flex-col gap-6 items-center w-full max-w-md animate-in fade-in slide-in-from-bottom-10 delay-500 duration-1000 fill-mode-forwards opacity-0">
+            <div className="flex flex-col gap-6 items-center w-full max-w-md mt-10">
                 {room.hostId === userId ? (
                     <button
                         onClick={handleReset}
