@@ -47,6 +47,8 @@ export default function GameView({ room }: { room: Room }) {
 
     if (!room.turn) return null;
 
+    const totalDuration = room.turn?.phase === "drawing" ? 60 : 15;
+
     return (
         <div className="w-full h-[100dvh] flex flex-col bg-[#1a56db] overflow-hidden font-sans select-none touch-none">
             <WordSelector room={room} />
@@ -56,7 +58,7 @@ export default function GameView({ room }: { room: Room }) {
                 {/* Left: Timer & Icons */}
                 <div className="flex items-center gap-2">
                     <div className="w-10 h-10 rounded-full bg-white border-2 border-slate-900 flex items-center justify-center font-bold text-xl text-slate-900 shadow-sm relative overflow-hidden">
-                        <div className="absolute inset-0 bg-slate-200 h-full" style={{ top: `${(1 - timeLeft / room.config.turnDuration) * 100}%` }}></div>
+                        <div className="absolute inset-0 bg-slate-200 h-full" style={{ top: `${(1 - timeLeft / totalDuration) * 100}%` }}></div>
                         <span className="relative z-10">{timeLeft}</span>
                     </div>
                 </div>
