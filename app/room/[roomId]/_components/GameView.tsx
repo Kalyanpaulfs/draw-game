@@ -68,7 +68,12 @@ export default function GameView({ room }: { room: Room }) {
                 <div className="text-right">
                     {/* Word Display */}
                     <div className="text-lg md:text-2xl font-mono tracking-widest bg-gray-900 px-3 py-1 md:px-6 md:py-2 rounded-lg border border-gray-600">
-                        {isDrawer ? (room.turn.secretWord || "...") : (room.turn.secretWord?.replace(/./g, "_ ") || "_ _ _")}
+                        {(() => {
+                            if (room.turn?.phase === "choosing_difficulty") return "DIFFICULTY...";
+                            if (room.turn?.phase === "choosing_word") return "WORD...";
+                            if (isDrawer) return room.turn?.secretWord || "...";
+                            return room.turn?.secretWord?.replace(/./g, "_ ") || "_ _ _";
+                        })()}
                     </div>
                 </div>
             </div>

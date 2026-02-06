@@ -1,6 +1,6 @@
 import { doc, setDoc, getDoc, updateDoc, Timestamp, runTransaction, collection, getDocs, writeBatch, addDoc } from "firebase/firestore";
 import { db } from "./firebase";
-import { Room, GameConfig, Player } from "./types";
+import { Room, GameConfig, Player, Difficulty } from "./types";
 import { generateRoomId } from "./game-utils";
 import { getRandomWords } from "./words";
 
@@ -114,9 +114,9 @@ export async function startGame(roomId: string) {
         playerOrder: playerIds,
         turn: {
             drawerId: firstDrawerId,
-            phase: "choosing",
+            phase: "choosing_difficulty",
             deadline,
-            candidateWords: getRandomWords(3),
+            candidateWords: [], // Wait for difficulty selection
             secretWord: "", // Will be set in Phase 4
             correctGuessers: [],
         },
@@ -166,9 +166,9 @@ export async function nextTurn(roomId: string) {
             currentRound: nextRound,
             turn: {
                 drawerId: nextDrawerId,
-                phase: "choosing",
+                phase: "choosing_difficulty",
                 deadline,
-                candidateWords: getRandomWords(3),
+                candidateWords: [],
                 secretWord: "",
                 correctGuessers: [],
             }
@@ -185,6 +185,27 @@ export async function nextTurn(roomId: string) {
     }
 }
 
+export async function selectDifficulty(roomId: string, difficulty: Difficulty) {
+    const roomRef = doc(db, "rooms", roomId);
+
+    await runTransaction(db, async (transaction) => {
+        const roomSnap = await transaction.get(roomRef);
+        if (!roomSnap.exists()) throw "Room not found";
+
+        const room = roomSnap.data() as Room;
+        if (!room.turn || room.turn.phase !== "choosing_difficulty") throw "Not choosing difficulty phase";
+
+        const deadline = Timestamp.fromMillis(Date.now() + 15000); // 15s to pick word
+
+        transaction.update(roomRef, {
+            "turn.phase": "choosing_word",
+            "turn.difficulty": difficulty,
+            "turn.candidateWords": getRandomWords(3, difficulty),
+            "turn.deadline": deadline,
+        });
+    });
+}
+
 export async function selectWord(roomId: string, word: string) {
     const roomRef = doc(db, "rooms", roomId);
 
@@ -193,7 +214,7 @@ export async function selectWord(roomId: string, word: string) {
         if (!roomSnap.exists()) throw "Room not found";
 
         const room = roomSnap.data() as Room;
-        if (!room.turn || room.turn.phase !== "choosing") throw "Not choosing phase";
+        if (!room.turn || room.turn.phase !== "choosing_word") throw "Not choosing word phase";
 
         // Validate word is a candidate
         if (!room.turn.candidateWords.includes(word)) {

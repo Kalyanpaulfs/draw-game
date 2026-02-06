@@ -17,13 +17,16 @@ export type GameConfig = {
     isPublic: boolean;
 };
 
+export type Difficulty = "easy" | "medium" | "hard";
+
 export type TurnState = {
     drawerId: string;
-    phase: "choosing" | "drawing" | "revealing";
+    phase: "choosing_difficulty" | "choosing_word" | "drawing" | "revealing";
     deadline: Timestamp;
     candidateWords: string[];
     secretWord: string;
     correctGuessers: string[];
+    difficulty?: Difficulty;
 };
 
 export type Room = {
