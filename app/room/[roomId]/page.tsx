@@ -137,7 +137,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
 
     // Signed in - Render Main Layout
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30 overflow-hidden flex flex-col relative">
+        <div className="h-[100dvh] bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30 overflow-hidden flex flex-col relative">
             {/* Background Effects */}
             <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black -z-20"></div>
             <div className="fixed inset-0 opacity-[0.03] pointer-events-none z-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] brightness-100 contrast-150"></div>
@@ -168,9 +168,11 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
             </header>
 
             {/* Main Content Area */}
-            <main className="relative z-10 flex-1 p-4 md:p-6 flex flex-col items-center justify-center w-full max-w-7xl mx-auto">
+            <main className={`relative z-10 flex-1 flex flex-col items-center justify-center w-full mx-auto ${room.status === "playing" ? "h-full p-0 max-w-none" : "p-4 md:p-6 max-w-7xl"}`}>
                 {room.status === "playing" ? (
-                    <GameView room={room} />
+                    <div className="w-full h-full">
+                        <GameView room={room} />
+                    </div>
                 ) : room.status === "finished" ? (
                     <GameOverView room={room} />
                 ) : (

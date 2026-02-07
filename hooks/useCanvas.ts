@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { collection, addDoc, onSnapshot, query, orderBy, Timestamp, getDocs, deleteDoc, writeBatch } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, query, orderBy, Timestamp, getDocs, deleteDoc, writeBatch, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Room } from "@/lib/types";
 
@@ -126,11 +126,59 @@ export function useCanvas(roomId: string, userId: string, isDrawer: boolean) {
         currentStroke.current.push(point);
     };
 
+    const redoStack = useRef<Stroke[]>([]);
+
+    // Undo: Remove last stroke and save to redo stack
+    const undo = async () => {
+        if (!roomId || !isDrawer) return;
+
+        try {
+            const strokesRef = collection(db, "rooms", roomId, "draw_strokes");
+            // Get the last stroke
+            const q = query(strokesRef, orderBy("timestamp", "desc"), limit(1));
+            const snapshot = await getDocs(q);
+
+            if (!snapshot.empty) {
+                const lastDoc = snapshot.docs[0];
+                const data = lastDoc.data() as Stroke;
+
+                // Save to redo stack
+                redoStack.current.push(data);
+
+                // Delete from DB
+                await deleteDoc(lastDoc.ref);
+            }
+        } catch (e) {
+            console.error("Undo failed:", e);
+        }
+    };
+
+    // Redo: Restore last undone stroke
+    const redo = async () => {
+        if (!roomId || !isDrawer || redoStack.current.length === 0) return;
+
+        const strokeToRestore = redoStack.current.pop();
+        if (!strokeToRestore) return;
+
+        try {
+            await addDoc(collection(db, "rooms", roomId, "draw_strokes"), {
+                ...strokeToRestore,
+                timestamp: Timestamp.now(), // New timestamp to put it at the end
+            });
+        } catch (e) {
+            console.error("Redo failed:", e);
+            // Put it back if failed? Nah, simple retry is fine or ignore.
+        }
+    };
+
     const stopDrawing = async () => {
         if (!isDrawer || !isDrawing.current) return;
         isDrawing.current = false;
 
         if (currentStroke.current.length > 0) {
+            // New drawing clears redo history
+            redoStack.current = [];
+
             // Sync to Firestore
             try {
                 await addDoc(collection(db, "rooms", roomId, "draw_strokes"), {
@@ -158,6 +206,7 @@ export function useCanvas(roomId: string, userId: string, isDrawer: boolean) {
             batch.delete(doc.ref);
         });
         await batch.commit();
+        redoStack.current = []; // Clear redo stack on clear board? Yes.
     };
 
     return {
@@ -170,6 +219,8 @@ export function useCanvas(roomId: string, userId: string, isDrawer: boolean) {
         startDrawing,
         draw,
         stopDrawing,
+        undo,
+        redo
     };
 }
 

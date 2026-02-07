@@ -4,7 +4,7 @@ import { Room } from "@/lib/types";
 import { useGameLoop } from "@/hooks/useGameLoop";
 import { useUser } from "@/hooks/useUser";
 import { useCanvas } from "@/hooks/useCanvas";
-import { useChat } from "@/hooks/useChat"; // New hook implementation
+import { useChat } from "@/hooks/useChat";
 import { submitGuess } from "@/lib/room-actions";
 import { TurnTimer } from "./TurnTimer";
 import { WordSelector } from "./WordSelector";
@@ -29,6 +29,8 @@ export default function GameView({ room }: { room: Room }) {
         startDrawing,
         draw,
         stopDrawing,
+        undo,
+        redo
     } = useCanvas(room.roomId, userId, isDrawer);
 
     const [guess, setGuess] = useState("");
@@ -50,7 +52,7 @@ export default function GameView({ room }: { room: Room }) {
     const totalDuration = room.turn?.phase === "drawing" ? 60 : 15;
 
     return (
-        <div className="w-full h-[100dvh] flex flex-col bg-[#1a56db] overflow-hidden font-sans select-none">
+        <div className="w-full h-full flex flex-col bg-[#1a56db] overflow-hidden font-sans select-none">
             <WordSelector room={room} />
 
             {/* Classic Header */}
@@ -89,9 +91,67 @@ export default function GameView({ room }: { room: Room }) {
                 </div>
             </div>
 
+            {/* Drawer Toolbar - Compact Static */}
+            {isDrawer && room.turn?.phase === "drawing" && (
+                <div className="shrink-0 bg-white border-b border-slate-200 px-3 py-2 flex items-center gap-3 z-30 shadow-sm overflow-x-auto no-scrollbar justify-between">
+                    {/* Tools Group */}
+                    <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={undo} className="p-1.5 rounded-full hover:bg-slate-100 text-slate-700" title="Undo">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+                        </button>
+                        <button onClick={redo} className="p-1.5 rounded-full hover:bg-slate-100 text-slate-700" title="Redo">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" /></svg>
+                        </button>
+                    </div>
+
+                    <div className="w-px h-6 bg-slate-200 shrink-0"></div>
+
+                    {/* Size Slider */}
+                    <div className="flex items-center gap-2 shrink-0">
+                        <div className="w-1.5 h-1.5 rounded-full bg-slate-300"></div>
+                        <input
+                            type="range"
+                            min="2"
+                            max="20"
+                            value={size}
+                            onChange={(e) => setSize(parseInt(e.target.value))}
+                            className="w-20 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-900"
+                        />
+                        <div className="w-5 h-5 flex items-center justify-center">
+                            <div className="rounded-full bg-slate-900" style={{ width: Math.max(2, size / 1.5), height: Math.max(2, size / 1.5), backgroundColor: color }}></div>
+                        </div>
+                    </div>
+
+                    <div className="w-px h-6 bg-slate-200 shrink-0"></div>
+
+                    {/* Colors (Scrollable) */}
+                    <div className="flex-1 flex gap-1.5 overflow-x-auto no-scrollbar items-center px-1 mask-linear-fade">
+                        {["#000000", "#555555", "#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e", "#10b981", "#06b6d4", "#3b82f6", "#8b5cf6", "#d946ef", "#f43f5e", "#78350f", "#ffffff"].map((c) => (
+                            <button
+                                key={c}
+                                onClick={() => setColor(c)}
+                                className={cn(
+                                    "w-6 h-6 shrink-0 rounded-full border border-slate-200/50 cursor-pointer transition-transform hover:scale-110",
+                                    color === c ? "ring-2 ring-slate-900 ring-offset-1 scale-110 z-10" : ""
+                                )}
+                                style={{ backgroundColor: c }}
+                                title={c}
+                            />
+                        ))}
+                    </div>
+
+                    <div className="w-px h-6 bg-slate-200 shrink-0"></div>
+
+                    {/* Trash */}
+                    <button onClick={clearBoard} className="p-1.5 rounded-full hover:bg-red-50 text-red-500 shrink-0" title="Clear Board">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </button>
+                </div>
+            )}
+
             {/* Main Content: Canvas */}
-            <div className="flex-1 flex flex-col items-center justify-start p-2 min-h-0 bg-[#3b72f0]/30 relative overflow-y-auto">
-                <div className="bg-white rounded-lg shadow-xl border-[4px] border-slate-900/10 overflow-hidden w-full max-w-lg aspect-square relative flex items-center justify-center shrink-0">
+            <div className="flex-1 flex flex-col items-center justify-center p-1 min-h-0 bg-[#3b72f0]/30 relative overflow-hidden">
+                <div className="bg-white rounded-lg shadow-xl border-[4px] border-slate-900/10 overflow-hidden w-full h-full relative flex items-center justify-center shrink-0">
                     <canvas
                         ref={canvasRef}
                         width={1200}
@@ -118,22 +178,11 @@ export default function GameView({ room }: { room: Room }) {
                             </div>
                         </div>
                     )}
-
-                    {/* Drawer Toolbar Overlay */}
-                    {isDrawer && room.turn?.phase === "drawing" && (
-                        <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-100/90 backdrop-blur rounded-full border border-slate-300 shadow-lg p-2 flex gap-3 items-center scale-90 origin-top z-20">
-                            {["#000000", "#EF4444", "#3B82F6", "#22C55E", "#EAB308"].map((c) => (
-                                <div key={c} onClick={() => setColor(c)} className={cn("w-6 h-6 rounded-full border border-black/10 cursor-pointer hover:scale-110 transition-transform", color === c ? "ring-2 ring-black scale-110" : "")} style={{ backgroundColor: c }} />
-                            ))}
-                            <div className="w-px h-5 bg-slate-300"></div>
-                            <button onClick={clearBoard} className="text-sm bg-white p-1 rounded hover:bg-red-50 text-red-500 border border-slate-200">🗑️</button>
-                        </div>
-                    )}
                 </div>
             </div>
 
             {/* Bottom Panel: Players & Chat */}
-            <div className="h-[35%] shrink-0 bg-[#1a56db] p-2 pt-0 flex gap-2">
+            <div className="h-[45%] shrink-0 bg-[#1a56db] p-2 pt-0 flex gap-2 min-h-[250px]">
 
                 {/* Left: Players */}
                 <div className="w-5/12 bg-white rounded-t-lg border-2 border-b-0 border-slate-900 overflow-hidden flex flex-col">
@@ -178,7 +227,7 @@ export default function GameView({ room }: { room: Room }) {
                                 value={guess}
                                 onChange={(e) => setGuess(e.target.value)}
                                 placeholder={isDrawer ? "It's your turn!" : "Type guess here..."}
-                                className="w-full bg-slate-100 border border-slate-300 rounded px-2 py-1 text-xs outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                                className="w-full bg-slate-100 border border-slate-300 rounded px-2 py-1 text-xs outline-none focus:border-blue-500 focus:bg-white transition-colors text-slate-900 placeholder-slate-500 font-bold"
                                 disabled={isDrawer}
                             />
                         </form>
