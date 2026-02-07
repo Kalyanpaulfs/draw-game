@@ -1,4 +1,5 @@
-import { doc, setDoc, getDoc, updateDoc, Timestamp, runTransaction, collection, getDocs, writeBatch, addDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, updateDoc, Timestamp, runTransaction, collection, getDocs, writeBatch, addDoc, deleteField } from "firebase/firestore";
+
 import { db } from "./firebase";
 import { Room, GameConfig, Player, Difficulty } from "./types";
 import { generateRoomId } from "./game-utils";
@@ -376,5 +377,31 @@ export async function toggleReady(roomId: string, userId: string) {
         transaction.update(roomRef, {
             [`players.${userId}.isReady`]: newReadyState
         });
+    });
+}
+
+export async function leaveRoom(roomId: string, userId: string) {
+    const roomRef = doc(db, "rooms", roomId);
+    await runTransaction(db, async (transaction) => {
+        const roomSnap = await transaction.get(roomRef);
+        if (!roomSnap.exists()) return;
+
+        const room = roomSnap.data() as Room;
+        const remainingPlayers = Object.keys(room.players).filter(id => id !== userId);
+
+        if (remainingPlayers.length === 0) {
+            transaction.delete(roomRef);
+        } else {
+            const updates: any = {
+                [`players.${userId}`]: deleteField()
+            };
+
+            if (room.hostId === userId) {
+                updates.hostId = remainingPlayers[0];
+            }
+            // If user was ready, maybe we don't need to do anything else, logic handles it.
+
+            transaction.update(roomRef, updates);
+        }
     });
 }
