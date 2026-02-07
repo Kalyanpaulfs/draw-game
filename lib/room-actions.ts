@@ -14,6 +14,7 @@ export async function createRoom(hostId: string, hostName: string, config: GameC
         score: 0,
         avatar: "😊",
         isOnline: true,
+        isReady: false,
         lastSeen: Timestamp.now(),
     };
 
@@ -65,6 +66,7 @@ export async function joinRoom(roomId: string, userId: string, userName: string)
         score: 0,
         avatar: "😎",
         isOnline: true,
+        isReady: false,
         lastSeen: Timestamp.now(),
     };
 
@@ -96,6 +98,12 @@ export async function startGame(roomId: string) {
 
     if (!roomSnap.exists()) return;
     const room = roomSnap.data() as Room;
+
+    // 0. Validate everyone is ready
+    const allReady = Object.values(room.players).every(p => p.isReady);
+    if (!allReady) {
+        throw new Error("Not all players are ready");
+    }
 
     // 1. Shuffle players
     const playerIds = Object.keys(room.players);
@@ -348,4 +356,23 @@ export async function resetGame(roomId: string) {
         snapshot.docs.forEach((d) => batch.delete(d.ref));
         await batch.commit().catch(console.error);
     }
+}
+
+export async function toggleReady(roomId: string, userId: string) {
+    const roomRef = doc(db, "rooms", roomId);
+
+    await runTransaction(db, async (transaction) => {
+        const roomSnap = await transaction.get(roomRef);
+        if (!roomSnap.exists()) throw "Room not found";
+
+        const room = roomSnap.data() as Room;
+        const player = room.players[userId];
+        if (!player) throw "Player not found";
+
+        const newReadyState = !player.isReady;
+
+        transaction.update(roomRef, {
+            [`players.${userId}.isReady`]: newReadyState
+        });
+    });
 }

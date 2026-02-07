@@ -1,7 +1,7 @@
 "use client";
 
 import { Room } from "@/lib/types";
-import { startGame } from "@/lib/room-actions";
+import { startGame, toggleReady } from "@/lib/room-actions";
 import { useState } from "react";
 import { cn } from "@/lib/game-utils";
 
@@ -35,10 +35,18 @@ export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
                             className={cn(
                                 "relative p-6 rounded-2xl flex flex-col items-center justify-center gap-3 transition-all duration-300 group",
                                 "bg-slate-800/40 border border-white/5 hover:bg-slate-800/60 hover:border-white/10",
-                                player.id === room.hostId && "bg-indigo-900/10 border-indigo-500/20 shadow-[0_0_20px_-5px_rgba(99,102,241,0.1)]"
+                                player.id === room.hostId && "bg-indigo-900/10 border-indigo-500/20 shadow-[0_0_20px_-5px_rgba(99,102,241,0.1)]",
+                                player.isReady && "border-emerald-500/50 bg-emerald-900/10"
                             )}
                         >
-                            <div className="text-5xl mb-2 drop-shadow-md transform group-hover:scale-110 transition-transform duration-300">{player.avatar}</div>
+                            <div className="text-5xl mb-2 drop-shadow-md transform group-hover:scale-110 transition-transform duration-300 relative">
+                                {player.avatar}
+                                {player.isReady && (
+                                    <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-white rounded-full p-1 border-2 border-slate-900">
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M5 13l4 4L19 7" /></svg>
+                                    </div>
+                                )}
+                            </div>
                             <div className="font-bold text-white tracking-tight truncate max-w-full text-lg">{player.name}</div>
 
                             {player.id === room.hostId && (
@@ -51,6 +59,14 @@ export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
                                     You
                                 </span>
                             )}
+
+                            {/* Readiness Status Text */}
+                            <div className={cn(
+                                "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full",
+                                player.isReady ? "text-emerald-400 bg-emerald-500/10" : "text-slate-500 bg-slate-800"
+                            )}>
+                                {player.isReady ? "Ready" : "Not Ready"}
+                            </div>
                         </div>
                     ))}
 
@@ -63,16 +79,33 @@ export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
                 </div>
 
                 <div className="mt-12 flex flex-col items-center justify-center gap-4">
+                    {/* Ready Toggle for Current User */}
+                    <button
+                        onClick={() => toggleReady(roomId, userId)}
+                        className={cn(
+                            "px-8 py-3 rounded-xl font-bold text-sm tracking-wide transition-all duration-300 border",
+                            room.players[userId]?.isReady
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/50 hover:bg-emerald-500/20"
+                                : "bg-slate-700 text-white border-slate-600 hover:bg-slate-600 hover:border-slate-500"
+                        )}
+                    >
+                        {room.players[userId]?.isReady ? "✅ I am Ready" : "⭕ Mark as Ready"}
+                    </button>
+
                     {isHost ? (
                         <>
                             <button
                                 onClick={async () => {
                                     setIsStarting(true);
-                                    await startGame(roomId);
+                                    try {
+                                        await startGame(roomId);
+                                    } catch (e) {
+                                        alert("Not everyone is ready!");
+                                    }
                                     setIsStarting(false);
                                 }}
-                                className="group relative px-10 py-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 bg-[length:200%_auto] bg-right hover:bg-left transition-all duration-500 rounded-2xl font-bold text-lg text-white shadow-[0_0_30px_-5px_rgba(99,102,241,0.4)] hover:shadow-[0_0_40px_-5px_rgba(99,102,241,0.6)] transform hover:-translate-y-1 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                                disabled={playerCount < 2 || isStarting}
+                                className="group relative px-10 py-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 bg-[length:200%_auto] bg-right hover:bg-left transition-all duration-500 rounded-2xl font-bold text-lg text-white shadow-[0_0_30px_-5px_rgba(99,102,241,0.4)] hover:shadow-[0_0_40px_-5px_rgba(99,102,241,0.6)] transform hover:-translate-y-1 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:grayscale"
+                                disabled={playerCount < 2 || isStarting || !Object.values(room.players).every(p => p.isReady)}
                             >
                                 <span className="relative z-10 flex items-center gap-2">
                                     {isStarting ? (
@@ -88,9 +121,11 @@ export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
                                     )}
                                 </span>
                             </button>
-                            {playerCount < 2 && (
+                            {playerCount < 2 ? (
                                 <p className="text-slate-500 text-sm animate-pulse">Waiting for at least one more player...</p>
-                            )}
+                            ) : !Object.values(room.players).every(p => p.isReady) ? (
+                                <p className="text-orange-400 text-sm animate-pulse">Waiting for all players to be ready...</p>
+                            ) : null}
                         </>
                     ) : (
                         <div className="flex flex-col items-center gap-2">

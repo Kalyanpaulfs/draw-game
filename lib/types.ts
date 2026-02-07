@@ -6,6 +6,7 @@ export type Player = {
     score: number;
     avatar: string; // URL or emoji or index
     isOnline: boolean;
+    isReady: boolean;
     lastSeen: Timestamp;
 };
 

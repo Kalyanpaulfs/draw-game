@@ -55,20 +55,31 @@ export default function GameView({ room }: { room: Room }) {
         <div className="w-full h-full flex flex-col bg-[#1a56db] overflow-hidden font-sans select-none">
             <WordSelector room={room} />
 
-            {/* Classic Header */}
-            <div className="h-14 shrink-0 flex items-center justify-between px-3 gap-2 bg-[#1a56db] relative z-20">
-                {/* Left: Timer & Icons */}
-                <div className="flex items-center gap-2">
-                    <div className="w-10 h-10 rounded-full bg-white border-2 border-slate-900 flex items-center justify-center font-bold text-xl text-slate-900 shadow-sm relative overflow-hidden">
-                        <div className="absolute inset-0 bg-slate-200 h-full" style={{ top: `${(1 - timeLeft / totalDuration) * 100}%` }}></div>
-                        <span className="relative z-10">{timeLeft}</span>
+            {/* Premium Mobile Header */}
+            <div className="h-16 shrink-0 flex items-center justify-between px-4 bg-slate-900/90 backdrop-blur-md border-b border-white/5 relative z-40 shadow-sm">
+                {/* Left: Timer */}
+                <div className="flex items-center gap-3">
+                    <div className="relative w-10 h-10 flex items-center justify-center">
+                        <svg className="absolute inset-0 w-full h-full -rotate-90 transform" viewBox="0 0 36 36">
+                            <path className="text-slate-800" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3" />
+                            <path
+                                className="text-indigo-500 transition-[stroke-dasharray] duration-1000 ease-linear"
+                                strokeDasharray={`${(timeLeft / totalDuration) * 100}, 100`}
+                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                            />
+                        </svg>
+                        <span className={cn("text-sm font-bold relative z-10", timeLeft <= 10 ? "text-red-400 animate-pulse" : "text-white")}>{timeLeft}</span>
                     </div>
                 </div>
 
                 {/* Center: Word */}
-                <div className="flex-1 flex justify-center">
-                    <div className="bg-[#f0e68c] px-4 py-1 rounded border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,0.2)] flex gap-2 items-center min-w-[120px] justify-center">
-                        <span className="font-mono text-lg font-bold tracking-[0.2em] text-slate-900 uppercase">
+                <div className="flex-1 flex justify-center px-2">
+                    <div className="bg-indigo-500/10 border border-indigo-500/20 px-4 py-1.5 rounded-full flex gap-2 items-center justify-center min-w-[120px] max-w-full shadow-[0_0_15px_-3px_rgba(99,102,241,0.1)] backdrop-blur-sm">
+                        <span className="font-mono text-sm sm:text-lg font-bold tracking-[0.15em] text-indigo-300 uppercase truncate">
                             {(() => {
                                 if (room.turn?.phase === "choosing_difficulty") return "WAITING";
                                 if (room.turn?.phase === "choosing_word") return "CHOOSING";
@@ -76,17 +87,22 @@ export default function GameView({ room }: { room: Room }) {
                                 return room.turn?.secretWord?.replace(/./g, "_") || "____";
                             })()}
                         </span>
-                        <div className="bg-yellow-100 text-[10px] font-bold px-1 rounded border border-yellow-600 text-yellow-800">
+                        <div className="bg-indigo-500/20 text-[9px] font-bold px-1.5 py-0.5 rounded text-indigo-300 shrink-0">
                             {room.turn?.secretWord?.length || 0}
                         </div>
                     </div>
                 </div>
 
-                {/* Right: Round & Icons */}
-                <div className="flex items-center gap-2">
-                    <div className="w-10 h-10 rounded-full bg-white border-2 border-slate-900 flex flex-col items-center justify-center text-[8px] font-bold text-slate-900 shadow-sm leading-tight">
-                        <span>RND</span>
-                        <span className="text-sm">{room.currentRound}/{room.config.rounds}</span>
+                {/* Right: Round */}
+                <div className="flex items-center gap-3">
+                    <div className="hidden sm:flex flex-col items-end opacity-60">
+                        <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold">Code</span>
+                        <span className="text-xs font-bold text-indigo-400 select-all font-mono">{room.roomId}</span>
+                    </div>
+                    <div className="w-px h-6 bg-white/10 hidden sm:block"></div>
+                    <div className="flex flex-col items-end">
+                        <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold">Round</span>
+                        <span className="text-xs font-bold text-white leading-none mt-0.5">{room.currentRound}<span className="text-slate-700 mx-0.5">/</span>{room.config.rounds}</span>
                     </div>
                 </div>
             </div>
