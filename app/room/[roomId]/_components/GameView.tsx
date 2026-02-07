@@ -9,12 +9,13 @@ import { submitGuess } from "@/lib/room-actions";
 import { TurnTimer } from "./TurnTimer";
 import { WordSelector } from "./WordSelector";
 import { cn } from "@/lib/game-utils";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 export default function GameView({ room }: { room: Room }) {
     const { userId, userName } = useUser();
     const { timeLeft } = useGameLoop(room, userId);
     const { messages } = useChat(room.roomId);
+    const chatEndRef = useRef<HTMLDivElement>(null);
 
     const isDrawer = room.turn?.drawerId === userId;
     const drawerName = room.players[room.turn?.drawerId || ""]?.name;
@@ -47,12 +48,17 @@ export default function GameView({ room }: { room: Room }) {
         }
     };
 
+    // Auto-scroll chat
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages]);
+
     if (!room.turn) return null;
 
     const totalDuration = room.turn?.phase === "drawing" ? 60 : 15;
 
     return (
-        <div className="w-full h-full flex flex-col bg-[#1a56db] overflow-hidden font-sans select-none">
+        <div className="w-full h-[100dvh] flex flex-col bg-slate-950 overflow-hidden font-sans select-none text-slate-200">
             <WordSelector room={room} />
 
             {/* Premium Mobile Header */}
@@ -109,36 +115,36 @@ export default function GameView({ room }: { room: Room }) {
 
             {/* Drawer Toolbar - Compact Static */}
             {isDrawer && room.turn?.phase === "drawing" && (
-                <div className="shrink-0 bg-white border-b border-slate-200 px-3 py-2 flex items-center gap-3 z-30 shadow-sm overflow-x-auto no-scrollbar justify-between">
+                <div className="shrink-0 bg-slate-900 border-b border-white/5 px-3 py-2 flex items-center gap-3 z-30 shadow-sm overflow-x-auto no-scrollbar justify-between">
                     {/* Tools Group */}
                     <div className="flex items-center gap-1 shrink-0">
-                        <button onClick={undo} className="p-1.5 rounded-full hover:bg-slate-100 text-slate-700" title="Undo">
+                        <button onClick={undo} className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white" title="Undo">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
                         </button>
-                        <button onClick={redo} className="p-1.5 rounded-full hover:bg-slate-100 text-slate-700" title="Redo">
+                        <button onClick={redo} className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white" title="Redo">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" /></svg>
                         </button>
                     </div>
 
-                    <div className="w-px h-6 bg-slate-200 shrink-0"></div>
+                    <div className="w-px h-6 bg-white/10 shrink-0"></div>
 
                     {/* Size Slider */}
                     <div className="flex items-center gap-2 shrink-0">
-                        <div className="w-1.5 h-1.5 rounded-full bg-slate-300"></div>
+                        <div className="w-1.5 h-1.5 rounded-full bg-slate-500"></div>
                         <input
                             type="range"
                             min="2"
                             max="20"
                             value={size}
                             onChange={(e) => setSize(parseInt(e.target.value))}
-                            className="w-20 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-900"
+                            className="w-20 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                         />
                         <div className="w-5 h-5 flex items-center justify-center">
-                            <div className="rounded-full bg-slate-900" style={{ width: Math.max(2, size / 1.5), height: Math.max(2, size / 1.5), backgroundColor: color }}></div>
+                            <div className="rounded-full ring-1 ring-white/20" style={{ width: Math.max(2, size / 1.5), height: Math.max(2, size / 1.5), backgroundColor: color }}></div>
                         </div>
                     </div>
 
-                    <div className="w-px h-6 bg-slate-200 shrink-0"></div>
+                    <div className="w-px h-6 bg-white/10 shrink-0"></div>
 
                     {/* Colors (Scrollable) */}
                     <div className="flex-1 flex gap-1.5 overflow-x-auto no-scrollbar items-center px-1 mask-linear-fade">
@@ -147,8 +153,8 @@ export default function GameView({ room }: { room: Room }) {
                                 key={c}
                                 onClick={() => setColor(c)}
                                 className={cn(
-                                    "w-6 h-6 shrink-0 rounded-full border border-slate-200/50 cursor-pointer transition-transform hover:scale-110",
-                                    color === c ? "ring-2 ring-slate-900 ring-offset-1 scale-110 z-10" : ""
+                                    "w-6 h-6 shrink-0 rounded-full border border-white/10 cursor-pointer transition-transform hover:scale-110",
+                                    color === c ? "ring-2 ring-white ring-offset-1 ring-offset-slate-900 scale-110 z-10" : ""
                                 )}
                                 style={{ backgroundColor: c }}
                                 title={c}
@@ -156,18 +162,18 @@ export default function GameView({ room }: { room: Room }) {
                         ))}
                     </div>
 
-                    <div className="w-px h-6 bg-slate-200 shrink-0"></div>
+                    <div className="w-px h-6 bg-white/10 shrink-0"></div>
 
                     {/* Trash */}
-                    <button onClick={clearBoard} className="p-1.5 rounded-full hover:bg-red-50 text-red-500 shrink-0" title="Clear Board">
+                    <button onClick={clearBoard} className="p-1.5 rounded-full hover:bg-red-500/20 text-red-500 shrink-0" title="Clear Board">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
                 </div>
             )}
 
             {/* Main Content: Canvas */}
-            <div className="flex-1 flex flex-col items-center justify-center p-1 min-h-0 bg-[#3b72f0]/30 relative overflow-hidden">
-                <div className="bg-white rounded-lg shadow-xl border-[4px] border-slate-900/10 overflow-hidden w-full h-full relative flex items-center justify-center shrink-0">
+            <div className="flex-1 flex flex-col items-center justify-center p-1 min-h-0 bg-slate-900 relative overflow-hidden">
+                <div className="bg-white rounded-lg shadow-xl overflow-hidden w-full h-full relative flex items-center justify-center shrink-0">
                     <canvas
                         ref={canvasRef}
                         width={1200}
@@ -184,7 +190,7 @@ export default function GameView({ room }: { room: Room }) {
 
                     {/* Choosing Word Overlay */}
                     {room.turn?.phase === "choosing_word" && !isDrawer && (
-                        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-start pt-10 z-10">
+                        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-start pt-10 z-10">
                             <div className="bg-white p-4 rounded-xl border-4 border-slate-900 shadow-2xl flex flex-col items-center gap-2 animate-bounce-in">
                                 <span className="text-6xl">{room.players[room.turn.drawerId]?.avatar}</span>
                                 <div className="text-center">
@@ -198,25 +204,25 @@ export default function GameView({ room }: { room: Room }) {
             </div>
 
             {/* Bottom Panel: Players & Chat */}
-            <div className="h-[45%] shrink-0 bg-[#1a56db] p-2 pt-0 flex gap-2 min-h-[250px]">
+            <div className="shrink-0 bg-slate-950 p-2 pt-0 flex gap-2 h-[35%] min-h-[220px] max-h-[400px]">
 
                 {/* Left: Players */}
-                <div className="w-5/12 bg-white rounded-t-lg border-2 border-b-0 border-slate-900 overflow-hidden flex flex-col">
-                    <div className="bg-slate-100 p-1 border-b border-slate-200 text-center text-[10px] font-bold uppercase text-slate-500">Players</div>
+                <div className="w-5/12 bg-slate-900 rounded-t-lg border border-white/10 overflow-hidden flex flex-col">
+                    <div className="bg-slate-800/50 p-1 border-b border-white/5 text-center text-[10px] font-bold uppercase text-slate-400">Players</div>
                     <div className="flex-1 overflow-y-auto p-1 space-y-1">
                         {Object.values(room.players)
                             .sort((a, b) => b.score - a.score)
                             .map((p, i) => (
                                 <div key={p.id} className={cn(
                                     "flex items-center p-1 rounded border shadow-sm relative pr-6",
-                                    p.id === room.turn?.drawerId ? "bg-orange-50 border-orange-200" : "bg-white border-slate-100"
+                                    p.id === room.turn?.drawerId ? "bg-indigo-500/20 border-indigo-500/50" : "bg-slate-800/50 border-white/5"
                                 )}>
                                     <div className="text-lg mr-1">{p.avatar}</div>
                                     <div className="flex-1 min-w-0">
-                                        <div className={cn("text-[11px] font-bold truncate leading-tight", p.id === userId ? "text-blue-600" : "text-slate-900")}>{p.name}</div>
+                                        <div className={cn("text-[11px] font-bold truncate leading-tight", p.id === userId ? "text-indigo-400" : "text-slate-200")}>{p.name}</div>
                                         <div className="text-[9px] text-slate-500 font-bold leading-tight">{p.score}</div>
                                     </div>
-                                    <div className="absolute top-1 right-1 text-[9px] font-black text-slate-300">#{i + 1}</div>
+                                    <div className="absolute top-1 right-1 text-[9px] font-black text-slate-600">#{i + 1}</div>
                                     {isDrawer && p.id === room.turn?.drawerId && <div className="absolute right-1 bottom-1 text-[10px]">✏️</div>}
                                 </div>
                             ))}
@@ -224,26 +230,27 @@ export default function GameView({ room }: { room: Room }) {
                 </div>
 
                 {/* Right: Chat */}
-                <div className="w-7/12 bg-white rounded-t-lg border-2 border-b-0 border-slate-900 flex flex-col overflow-hidden">
-                    <div className="flex-1 overflow-y-auto p-2 space-y-1 bg-slate-50 text-xs">
+                <div className="w-7/12 bg-slate-900 rounded-t-lg border border-white/10 flex flex-col overflow-hidden">
+                    <div className="flex-1 overflow-y-auto p-2 space-y-1 bg-slate-900/50 text-xs">
                         {messages.map((msg) => (
                             <div key={msg.id} className={cn(
                                 "leading-tight break-words",
-                                msg.isSystem ? (msg.text.includes("guessed") ? "text-green-600 font-bold bg-green-50 p-1 rounded" : "text-blue-600 font-bold text-center my-1") : "text-slate-800"
+                                msg.isSystem ? (msg.text.includes("guessed") ? "text-emerald-400 font-bold bg-emerald-500/10 p-1 rounded" : "text-indigo-400 font-bold text-center my-1") : "text-slate-300"
                             )}>
-                                {!msg.isSystem && <span className="font-bold text-slate-900">{msg.userName}: </span>}
+                                {!msg.isSystem && <span className="font-bold text-white">{msg.userName}: </span>}
                                 {msg.text}
                             </div>
                         ))}
+                        <div ref={chatEndRef} />
                     </div>
-                    <div className="p-2 border-t border-slate-200 bg-white">
+                    <div className="p-2 border-t border-white/10 bg-slate-800">
                         <form onSubmit={handleGuess} className="flex gap-1">
                             <input
                                 type="text"
                                 value={guess}
                                 onChange={(e) => setGuess(e.target.value)}
                                 placeholder={isDrawer ? "It's your turn!" : "Type guess here..."}
-                                className="w-full bg-slate-100 border border-slate-300 rounded px-2 py-1 text-xs outline-none focus:border-blue-500 focus:bg-white transition-colors text-slate-900 placeholder-slate-500 font-bold"
+                                className="w-full bg-slate-900 border border-white/10 rounded px-2 py-2 text-xs outline-none focus:border-indigo-500 focus:bg-slate-900 transition-colors text-white placeholder-slate-500 font-bold"
                                 disabled={isDrawer}
                             />
                         </form>

@@ -339,10 +339,12 @@ export async function resetGame(roomId: string) {
             createdAt: Timestamp.now(), // Reset time to sort/filter if needed
         };
 
-        // Reset scores
+        // Reset scores and ready status
         Object.keys(room.players).forEach(pid => {
             // @ts-expect-error: Inferred type mismatch
             updates[`players.${pid}.score`] = 0;
+            // @ts-expect-error: Inferred type mismatch
+            updates[`players.${pid}.isReady`] = false;
         });
 
         transaction.update(roomRef, updates);
