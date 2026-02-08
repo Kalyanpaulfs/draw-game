@@ -9,6 +9,7 @@ import { joinRoom } from "@/lib/room-actions";
 import { LobbyView } from "./_components/LobbyView";
 import GameView from "./_components/GameView";
 import GameOverView from "./_components/GameOverView";
+import { VoiceChat } from "./_components/VoiceChat";
 
 export default function RoomPage({ params }: { params: Promise<{ roomId: string }> }) {
     const { roomId } = use(params);
@@ -101,6 +102,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
                                     type="text"
                                     value={joinName}
                                     onChange={(e) => setJoinName(e.target.value)}
+
                                     className="w-full px-4 py-3 bg-slate-950/50 border border-white/10 rounded-xl focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 text-white placeholder-slate-600 outline-none transition-all duration-300 font-medium"
                                     placeholder="Enter your name..."
                                 />
@@ -143,6 +145,8 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
             <div className="fixed inset-0 opacity-[0.03] pointer-events-none z-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] brightness-100 contrast-150"></div>
             <div className="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] bg-purple-500/10 rounded-full blur-[100px] pointer-events-none"></div>
             <div className="fixed bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+
+            <VoiceChat roomId={roomId} userId={userId} players={room.players} />
 
             {/* Glass Header */}
             <header className="relative z-10 px-6 py-4 border-b border-white/5 bg-slate-900/50 backdrop-blur-xl flex justify-between items-center shadow-2xl">

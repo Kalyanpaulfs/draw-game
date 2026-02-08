@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 interface LobbyViewProps {
     room: Room;
     userId: string;
-    roomId: string; // explicitly passed for display/copy
+    roomId: string;
 }
 
 export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
@@ -17,6 +17,7 @@ export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
     const router = useRouter();
     const isHost = room.hostId === userId;
     const playerCount = Object.keys(room.players).length;
+    const player = room.players[userId]; // Current user's player object
 
     const handleLeave = async () => {
         if (confirm("Are you sure you want to leave the room?")) {
@@ -25,82 +26,126 @@ export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
         }
     };
 
+    const handleCopyRoomId = () => {
+        navigator.clipboard.writeText(roomId);
+        // Could add a toast here ideally
+    };
+
     return (
-        <div className="w-full min-h-screen flex items-center justify-center p-4 lg:p-8">
-            <div className="w-full max-w-5xl mx-auto flex flex-col gap-8">
+        <div className="fixed inset-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-[#0a0f1c] to-black flex flex-col overflow-hidden text-slate-200 font-sans selection:bg-indigo-500/30 selection:text-indigo-200">
 
-                {/* Header Bar */}
-                <div className="bg-slate-900/60 backdrop-blur-xl border border-white/5 rounded-2xl p-4 flex items-center justify-between shadow-2xl relative overflow-hidden group">
-                    <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
+            {/* Ambient Background Effects */}
+            <div className="absolute top-0 left-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-[100px] pointer-events-none animate-pulse" style={{ animationDuration: '4s' }}></div>
+            <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-[100px] pointer-events-none animate-pulse" style={{ animationDuration: '7s' }}></div>
 
-                    <div className="flex items-center gap-6 relative z-10">
-                        <div className="bg-white/5 p-3 rounded-xl border border-white/10">
-                            <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1 leading-none">Room Code</div>
-                            <div className="text-3xl font-mono font-bold text-white tracking-widest leading-none select-all cursor-pointer" onClick={() => navigator.clipboard.writeText(roomId)}>
-                                {roomId}
+            {/* --- Header Bar (Fixed) --- */}
+            <header className="flex-none px-6 py-4 md:py-6 border-b border-white/5 bg-slate-900/40 backdrop-blur-xl z-50">
+                <div className="max-w-7xl mx-auto w-full flex items-center justify-between">
+
+                    {/* Left: Branding & Status */}
+                    <div className="flex items-center gap-4 md:gap-8">
+                        <div>
+                            <h1 className="text-xl md:text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">
+                                DRAW.GAME
+                            </h1>
+                            <div className="flex items-center gap-2 text-xs font-medium text-slate-500 mt-0.5">
+                                <span className={cn("inline-block w-2 h-2 rounded-full animate-pulse", playerCount >= 2 ? "bg-emerald-500" : "bg-amber-500")}></span>
+                                <span className="hidden md:inline uppercase tracking-widest">{playerCount < 2 ? "Waiting for players..." : "Ready to start"}</span>
+                                <span className="md:hidden uppercase tracking-widest">{playerCount < 2 ? "Waiting..." : "Ready"}</span>
                             </div>
-                        </div>
-                        <div className="hidden md:block h-10 w-px bg-white/10"></div>
-                        <div className="hidden md:flex flex-col">
-                            <span className="text-sm font-bold text-slate-200">Draw Game</span>
-                            <span className="text-xs text-slate-500">Waiting for players...</span>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-4 relative z-10">
-                        <div className="px-4 py-2 bg-slate-950/50 rounded-lg border border-white/5 flex items-center gap-2">
-                            <div className="flex -space-x-2">
-                                {Array.from({ length: 4 }).map((_, i) => (
-                                    <div key={i} className={cn("w-2 h-2 rounded-full ring-2 ring-slate-900", i < playerCount ? "bg-emerald-400" : "bg-slate-700")} />
-                                ))}
+                    {/* Right: Room Code & Leave */}
+                    <div className="flex items-center gap-3 md:gap-6">
+                        <button
+                            onClick={handleCopyRoomId}
+                            className="group flex flex-col items-end md:items-center bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 rounded-xl px-4 py-2 transition-all active:scale-95 cursor-pointer"
+                            title="Click to copy"
+                        >
+                            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-widest group-hover:text-slate-400 transition-colors">Room Code</span>
+                            <div className="flex items-center gap-2">
+                                <span className="font-mono text-lg md:text-xl font-bold text-white tracking-widest">{roomId}</span>
+                                <svg className="w-4 h-4 text-slate-500 opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                             </div>
-                            <span className="text-xs font-bold text-slate-400 ml-2">{playerCount}/4</span>
-                        </div>
+                        </button>
+
                         <button
                             onClick={handleLeave}
-                            className="bg-red-500/10 hover:bg-red-500/20 text-red-400 p-3 rounded-xl transition-colors border border-transparent hover:border-red-500/20"
+                            className="p-3 md:px-4 md:py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl border border-red-500/20 hover:border-red-500/30 transition-all active:scale-95 flex items-center gap-2"
+                            title="Leave Room"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                            <span className="hidden md:inline font-bold text-sm">Leave</span>
                         </button>
                     </div>
                 </div>
+            </header>
 
-                {/* Main Content Area */}
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* --- Main Content (Scrollable) --- */}
+            <main className="flex-1 overflow-hidden relative w-full max-w-7xl mx-auto p-4 md:p-6 lg:p-8 flex flex-col md:flex-row gap-6">
 
-                    {/* Player Grid */}
-                    <div className="lg:col-span-3 grid grid-cols-2 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4">
-                        {Object.values(room.players).map((player) => (
-                            <div key={player.id} className="group relative">
+                {/* Players Grid - Scrollable Amount */}
+                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 pb-32 md:pb-0">
+                        {Object.values(room.players).map((p) => (
+                            <div key={p.id} className="group relative">
+                                {/* Glow Effect */}
                                 <div className={cn(
-                                    "absolute inset-0 rounded-3xl transition-all duration-300 opacity-0 group-hover:opacity-100",
-                                    player.isReady ? "bg-emerald-500/20 blur-xl" : "bg-indigo-500/20 blur-xl"
+                                    "absolute inset-0 rounded-2xl blur-xl transition-all duration-500",
+                                    p.isReady ? "bg-emerald-500/20 opacity-100" : "bg-indigo-500/10 opacity-0 group-hover:opacity-100"
                                 )}></div>
+
                                 <div className={cn(
-                                    "relative h-full bg-slate-900/40 backdrop-blur-md border rounded-3xl p-6 flex flex-col items-center gap-4 transition-all duration-300",
-                                    player.isReady ? "border-emerald-500/30 bg-emerald-950/10" : "border-white/5 hover:border-white/10"
+                                    "relative h-full bg-slate-900/80 backdrop-blur-md border rounded-2xl p-5 flex items-center gap-5 transition-all duration-300",
+                                    p.isReady ? "border-emerald-500/30" : "border-white/5 hover:border-white/10"
                                 )}>
                                     {/* Avatar */}
-                                    <div className="relative w-24 h-24 flex items-center justify-center">
+                                    <div className="relative shrink-0">
                                         <div className={cn(
-                                            "absolute inset-0 rounded-full opacity-20 animate-pulse",
-                                            player.isReady ? "bg-emerald-500" : "bg-indigo-500"
-                                        )}></div>
-                                        <span className="text-6xl relative z-10 drop-shadow-lg">{player.avatar}</span>
-                                        {player.id === room.hostId && (
-                                            <div className="absolute -top-2 -right-2 bg-yellow-500 text-yellow-950 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shadow-lg">Host</div>
-                                        )}
+                                            "w-16 h-16 rounded-2xl flex items-center justify-center text-4xl shadow-2xl border border-white/10",
+                                            p.isReady ? "bg-gradient-to-br from-emerald-500/20 to-teal-500/20" : "bg-gradient-to-br from-indigo-500/20 to-purple-500/20"
+                                        )}>
+                                            {p.avatar}
+                                        </div>
+                                        {/* Status Indicator Badge */}
+                                        <div className={cn(
+                                            "absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center border-2 border-slate-900 text-[10px]",
+                                            p.isReady ? "bg-emerald-500 text-emerald-950" : "bg-slate-700 text-slate-400"
+                                        )}>
+                                            {p.isReady ? "✓" : "•"}
+                                        </div>
                                     </div>
 
                                     {/* Info */}
-                                    <div className="text-center w-full">
-                                        <div className="font-bold text-white text-lg truncate mb-1">{player.name}</div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="font-bold text-white text-lg truncate block">{p.name}</span>
+                                            {p.id === room.hostId && (
+                                                <span className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/30 text-amber-300 text-[9px] font-black uppercase tracking-wider">HOST</span>
+                                            )}
+                                            {p.id === userId && (
+                                                <span className="px-1.5 py-0.5 rounded bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 text-[9px] font-black uppercase tracking-wider">YOU</span>
+                                            )}
+                                        </div>
                                         <div className={cn(
-                                            "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest",
-                                            player.isReady ? "bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20" : "bg-slate-800 text-slate-500"
+                                            "text-xs font-medium flex items-center gap-1.5",
+                                            p.isReady ? "text-emerald-400" : "text-slate-500"
                                         )}>
-                                            <div className={cn("w-1.5 h-1.5 rounded-full", player.isReady ? "bg-emerald-400 animate-pulse" : "bg-slate-500")} />
-                                            {player.isReady ? "Ready" : "Not Ready"}
+                                            {p.isReady ? (
+                                                <>
+                                                    <span className="relative flex h-2 w-2">
+                                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                                    </span>
+                                                    Ready to play!
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
+                                                    Not ready
+                                                </>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -108,78 +153,80 @@ export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
                         ))}
 
                         {/* Empty Slots */}
-                        {Array.from({ length: Math.max(0, 4 - playerCount) }).map((_, i) => (
-                            <div key={`empty-${i}`} className="bg-slate-900/20 border-2 border-dashed border-white/5 rounded-3xl p-6 flex flex-col items-center justify-center gap-3 opacity-40 hover:opacity-60 transition-opacity min-h-[240px]">
-                                <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center text-slate-500">
-                                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                                </div>
-                                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Open Slot</span>
+                        {Array.from({ length: Math.max(0, 8 - playerCount) }).map((_, i) => (
+                            <div key={`empty-${i}`} className="h-24 md:h-28 rounded-2xl border-2 border-dashed border-white/5 bg-white/[0.02] flex items-center justify-center gap-3 text-slate-600">
+                                <span className="text-2xl opacity-20">Waiting...</span>
                             </div>
                         ))}
                     </div>
+                </div>
 
-                    {/* Sidebar / Controls */}
-                    <div className="lg:col-span-1 flex flex-col gap-4">
-                        <div className="bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-3xl p-6 flex-1 flex flex-col justify-center gap-6 shadow-xl relative overflow-hidden">
-                            {/* Glow Effect */}
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-[50px] rounded-full pointer-events-none"></div>
+                {/* Sidebar Controls - Fixed on Desktop, Bottom Sheet on Mobile */}
+                <div className="fixed bottom-0 left-0 right-0 md:static md:w-80 md:flex-none p-4 md:p-0 bg-slate-900/90 md:bg-transparent border-t md:border-t-0 border-white/10 backdrop-blur-xl md:backdrop-blur-none z-40 pb-6 md:pb-0 safe-area-bottom">
+                    <div className="flex flex-col gap-4">
 
-                            <div className="text-center">
-                                <h3 className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-4">Your Status</h3>
+                        {/* Ready Button */}
+                        <button
+                            onClick={() => toggleReady(roomId, userId)}
+                            className={cn(
+                                "w-full py-4 rounded-xl font-bold text-base uppercase tracking-widest transition-all duration-300 transform active:scale-[0.98] shadow-lg flex items-center justify-center gap-3",
+                                player?.isReady
+                                    ? "bg-slate-800 text-slate-400 border border-white/10 hover:bg-slate-700 hover:text-white"
+                                    : "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white shadow-emerald-500/25"
+                            )}
+                        >
+                            {player?.isReady ? (
+                                <>
+                                    <span>Cancel Ready</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span>Ready Up</span>
+                                    <span className="text-xl">🚀</span>
+                                </>
+                            )}
+                        </button>
+
+                        {/* Host Controls */}
+                        {isHost ? (
+                            <div className="pt-0 md:pt-6 md:border-t border-white/5 text-center">
+                                <div className="hidden md:block text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-3">Host Controls</div>
                                 <button
-                                    onClick={() => toggleReady(roomId, userId)}
-                                    className={cn(
-                                        "w-full py-4 rounded-xl font-bold text-sm uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-3 shadow-lg group relative overflow-hidden",
-                                        room.players[userId]?.isReady
-                                            ? "bg-slate-800 text-slate-400 border border-white/5 hover:text-white"
-                                            : "bg-white text-slate-900 hover:bg-emerald-400 hover:text-emerald-950 border border-transparent shadow-emerald-500/20"
-                                    )}
+                                    onClick={async () => {
+                                        setIsStarting(true);
+                                        try { await startGame(roomId); } catch (e) { alert("Wait for everyone to be ready!"); }
+                                        setIsStarting(false);
+                                    }}
+                                    disabled={playerCount < 2 || isStarting || !Object.values(room.players).every(p => p.isReady)}
+                                    className="w-full py-3 md:py-4 rounded-xl font-black text-sm uppercase tracking-widest text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 shadow-lg shadow-indigo-500/25 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed transition-all active:scale-[0.98]"
                                 >
-                                    <div className={cn(
-                                        "absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300",
-                                        room.players[userId]?.isReady ? "bg-white/5" : "bg-white/20"
-                                    )} />
-                                    {room.players[userId]?.isReady ? (
-                                        <><span>Cancel</span></>
+                                    {isStarting ? (
+                                        <span className="animate-pulse">Starting Game...</span>
                                     ) : (
-                                        <>
-                                            <div className="w-2 h-2 bg-emerald-500 group-hover:bg-emerald-900 rounded-full animate-ping" />
-                                            <span>Ready Up</span>
-                                        </>
+                                        <div className="flex items-center justify-center gap-2">
+                                            <span>Start Game</span>
+                                            {!(!Object.values(room.players).every(p => p.isReady) && playerCount >= 2) && <span>👑</span>}
+                                        </div>
                                     )}
                                 </button>
+                                {(!Object.values(room.players).every(p => p.isReady) && playerCount >= 2) && (
+                                    <p className="text-[10px] text-center text-amber-400/80 mt-2 font-medium">Wait for all players to be ready</p>
+                                )}
+                                {playerCount < 2 && (
+                                    <p className="text-[10px] text-center text-slate-500 mt-2 font-medium">Need at least 2 players</p>
+                                )}
                             </div>
+                        ) : (
+                            // Status Message for Non-Hosts
+                            <div className="hidden md:block pt-6 border-t border-white/5 text-center">
+                                <p className="text-xs text-slate-500 font-medium animate-pulse">Waiting for host to start...</p>
+                            </div>
+                        )}
 
-                            {isHost ? (
-                                <div className="pt-6 border-t border-white/5 text-center">
-                                    <h3 className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-4">Host Controls</h3>
-                                    <button
-                                        onClick={async () => {
-                                            setIsStarting(true);
-                                            try { await startGame(roomId); } catch (e) { alert("Wait for everyone to be ready!"); }
-                                            setIsStarting(false);
-                                        }}
-                                        disabled={playerCount < 2 || isStarting || !Object.values(room.players).every(p => p.isReady)}
-                                        className="w-full py-4 rounded-xl font-black text-sm uppercase tracking-widest text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 shadow-lg shadow-indigo-500/25 disabled:opacity-50 disabled:cursor-not-allowed hover:transform hover:-translate-y-0.5 transition-all"
-                                    >
-                                        {isStarting ? "Starting..." : "Start Game"}
-                                    </button>
-                                    {(!Object.values(room.players).every(p => p.isReady) && playerCount >= 2) && (
-                                        <p className="text-[10px] text-orange-400 mt-3 font-bold animate-pulse">Waiting for players...</p>
-                                    )}
-                                </div>
-                            ) : (
-                                <div className="text-center pt-4 border-t border-white/5">
-                                    <div className="inline-block px-4 py-2 bg-slate-950/50 rounded-lg text-xs font-medium text-slate-500">
-                                        Waiting for host to start...
-                                    </div>
-                                </div>
-                            )}
-                        </div>
                     </div>
                 </div>
 
-            </div>
+            </main>
         </div>
     );
 }
