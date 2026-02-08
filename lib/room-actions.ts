@@ -107,12 +107,22 @@ export async function startGame(roomId: string) {
     }
 
     // 1. Shuffle players
-    const playerIds = Object.keys(room.players);
-    // Fisher-Yates shuffle
-    for (let i = playerIds.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [playerIds[i], playerIds[j]] = [playerIds[j], playerIds[i]];
-    }
+    // 1. Sort players by join time (using stable key or index if available)
+    // We want Host -> 1st Joiner -> 2nd Joiner etc.
+    // room.players is an object, order is not guaranteed.
+    // However, we can sort by 'joinedAt' if we had it. 
+    // We don't have joinedAt, but we have `lastSeen` which is set on join.
+    // For a better experience, we should probably stick to sorting by Name or simply 
+    // rely on the order of keys if we want simplicity, BUT user specifically asked for join order.
+    // Let's use `lastSeen` as a proxy for join time since it's set on join.
+    // Better: Sort by when they were added? We don't track that explicitly.
+    // Alternative: Sort alphabetically? No, user wants Sequence.
+    // Correct Fix: We will assume `lastSeen` roughly equals join time for the first game.
+    const playerIds = Object.keys(room.players).sort((a, b) => {
+        const p1 = room.players[a];
+        const p2 = room.players[b];
+        return p1.lastSeen.toMillis() - p2.lastSeen.toMillis();
+    });
 
     // 2. Set first turn
     const firstDrawerId = playerIds[0];
