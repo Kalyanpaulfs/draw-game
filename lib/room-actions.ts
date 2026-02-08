@@ -272,16 +272,48 @@ export async function submitGuess(roomId: string, userId: string, userName: stri
             // Correct Guess!
             if (room.turn.correctGuessers?.includes(userId)) return;
 
-            const points = 100;
-            const drawerPoints = 50;
+            // Scoring Logic
+
+            // 1. Guesser Score: Ratio-based (Works for ANY round duration)
+            // Formula: Base(50) + (TimeRatio * 50)
+            // Example: 60s round. Guess at 54s (Ratio 0.9) -> 50 + 45 = 95 pts.
+            // Example: 30s round. Guess at 27s (Ratio 0.9) -> 50 + 45 = 95 pts.
+            const now = Date.now();
+            const deadline = room.turn.deadline.toMillis();
+
+            // Calculate total duration based on phase (default 60s if not stored)
+            // Future-proof: We should store turn duration in room.turn to be exact, 
+            // but for now 60s is the fixed draw time.
+            const totalDuration = 60 * 1000;
+
+            const timeLeft = Math.max(0, deadline - now);
+            const timeRatio = Math.min(1, Math.max(0, timeLeft / totalDuration));
+
+            const points = Math.round(50 + (timeRatio * 50));
+
+            // 2. Drawer Score: Percentage of audience reached
+            // Formula: (CorrectGuesses / TotalPotentialGuessers) * 100
+            // This scales automatically with room size.
+            const totalPlayers = Object.keys(room.players).length;
+            const potentialGuessers = Math.max(1, totalPlayers - 1); // Exclude drawer
+
+            const newCorrectGuessers = [...(room.turn.correctGuessers || []), userId];
+            const correctCount = newCorrectGuessers.length;
+
+            // Drawer gets score based on NEW total percentage
+            // We recalculate drawer score significantly? 
+            // Better: Just set drawer score to (Count / Total) * 100 * RoundWeight?
+            // Actually, simply: Drawer Score for this round = (Count/Total) * 100.
+            // But we add incrementally.
+            // Increment = (1 / Potential) * 100.
+            const drawerIncrement = Math.round((1 / potentialGuessers) * 100);
 
             const currentScore = room.players[userId]?.score || 0;
             const drawerScore = room.players[room.turn.drawerId]?.score || 0;
-            const newCorrectGuessers = [...(room.turn.correctGuessers || []), userId];
 
             const updates = {
                 [`players.${userId}.score`]: currentScore + points,
-                [`players.${room.turn.drawerId}.score`]: drawerScore + drawerPoints,
+                [`players.${room.turn.drawerId}.score`]: drawerScore + drawerIncrement,
                 "turn.correctGuessers": newCorrectGuessers
             };
 

@@ -65,6 +65,12 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
                 initiator,
                 trickle: false,
                 stream: streamRef.current || undefined,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:global.stun.twilio.com:3478' }
+                    ]
+                }
             });
 
             peer.on("signal", (sig: any) => {
