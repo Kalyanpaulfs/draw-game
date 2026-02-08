@@ -90,7 +90,7 @@ export default function Home() {
         {/* Header */}
         <div className="text-center mb-12 space-y-2">
           <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-white drop-shadow-sm">
-            Draw<span className="text-indigo-500">.</span>io
+            Pixxi<span className="text-indigo-500">Pop</span>
           </h1>
           <p className="text-slate-500 font-medium tracking-wide text-sm uppercase opacity-80">
             Premium Real-Time Collaboration

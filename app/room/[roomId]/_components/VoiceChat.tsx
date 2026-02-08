@@ -1,11 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Room } from "@/lib/types";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, addDoc, doc, deleteDoc, query, where, getDocs, writeBatch } from "firebase/firestore";
 // @ts-expect-error: No types for simple-peer
 import SimplePeer from "simple-peer";
+
+// Polyfill for simple-peer in browser environment (fixes Buffer/process errors)
+if (typeof window !== 'undefined') {
+    if ((window as any).global === undefined) (window as any).global = window;
+    if ((window as any).process === undefined) (window as any).process = { env: {} };
+}
 
 interface VoiceChatProps {
     roomId: string;
@@ -25,161 +31,195 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
     const streamRef = useRef<MediaStream | null>(null);
     const [isMuted, setIsMuted] = useState(false);
 
-    // 1. Get User Media
+    // Audio Initialization
     useEffect(() => {
+        let mounted = true;
         navigator.mediaDevices.getUserMedia({ video: false, audio: true })
-            .then((currentStream) => {
-                setStream(currentStream);
-                streamRef.current = currentStream;
+            .then((stream) => {
+                if (mounted) {
+                    setStream(stream);
+                    streamRef.current = stream;
+                }
             })
             .catch((err) => {
-                console.error("Failed to get microphone:", err);
+                console.error("Error accessing microphone:", err);
             });
 
         return () => {
-            // Cleanup stream
+            mounted = false;
             if (streamRef.current) {
                 streamRef.current.getTracks().forEach(track => track.stop());
             }
         };
     }, []);
 
-    // 2. Listen for Signals specific to ME
-    useEffect(() => {
-        if (!streamRef.current) return;
+    // Helper to create peer (memoized)
+    const createPeer = useCallback((id: string, initiator: boolean, incomingSignal?: any) => {
+        try {
+            if (peersRef.current[id]) {
+                if (incomingSignal) peersRef.current[id].peer.signal(incomingSignal);
+                return;
+            }
 
-        const signalsRef = collection(db, "rooms", roomId, "signals", userId, "inbox");
-        const unsubscribe = onSnapshot(signalsRef, (snapshot) => {
+            const peer = new SimplePeer({
+                initiator,
+                trickle: false,
+                stream: streamRef.current || undefined,
+            });
+
+            peer.on("signal", (sig: any) => {
+                sendSignal(roomId, id, userId, sig);
+            });
+
+            peer.on("stream", (remoteStream: MediaStream) => {
+                setPeers((prev) => ({
+                    ...prev,
+                    [id]: { peer: peer!, stream: remoteStream }
+                }));
+            });
+
+            peer.on("error", (err: any) => console.error(`Peer Error ${id}:`, err));
+
+            peer.on("close", () => {
+                delete peersRef.current[id];
+                setPeers(prev => {
+                    const next = { ...prev };
+                    delete next[id];
+                    return next;
+                });
+            });
+
+            if (incomingSignal) {
+                peer.signal(incomingSignal);
+            }
+
+            peersRef.current[id] = { peer };
+            setPeers((prev) => ({ ...prev, [id]: { peer } }));
+        } catch (err: any) {
+            console.error("Create Peer Error:", err);
+        }
+    }, [roomId, userId, stream]);
+
+    // WebRTC: Signaling & Peers
+    useEffect(() => {
+        if (!stream || !userId || !roomId) return;
+
+        // Listen for signals
+        const q = query(
+            collection(db, "rooms", roomId, "signals", userId, "inbox"),
+            where("timestamp", ">", Date.now() - 10000)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
             snapshot.docChanges().forEach((change) => {
                 if (change.type === "added") {
                     const data = change.doc.data();
                     const senderId = data.senderId;
                     const signal = JSON.parse(data.signal);
 
-                    // If peer exists, just signal it
                     if (peersRef.current[senderId]) {
-                        // Avoid signaling if destroyed
-                        if (!peersRef.current[senderId].peer.destroyed) {
-                            peersRef.current[senderId].peer.signal(signal);
-                        }
+                        peersRef.current[senderId].peer.signal(signal);
                     } else {
-                        // New incoming connection (I am the answerer)
-                        // Verify determining rule: Only accept if I am > Sender?
-                        // Actually, if I receive a signal, I must answer it regardless, 
-                        // but strictly speaking, I should expect signals from `myId > senderId` (if they initiated).
-                        // However, just responding to incoming offers is safer.
-
-                        const peer = new SimplePeer({
-                            initiator: false,
-                            trickle: false,
-                            stream: streamRef.current,
-                        });
-
-                        peer.on("signal", (signalData: any) => {
-                            // Send answer back
-                            sendSignal(roomId, senderId, userId, signalData);
-                        });
-
-                        peer.on("stream", (remoteStream: MediaStream) => {
-                            setPeers((prev) => ({ ...prev, [senderId]: { peer, stream: remoteStream } }));
-                            peersRef.current[senderId] = { peer, stream: remoteStream };
-                        });
-
-                        peer.on("close", () => {
-                            removePeer(senderId);
-                        });
-                        peer.on("error", () => {
-                            removePeer(senderId);
-                        });
-
-                        peersRef.current[senderId] = { peer }; // Stream comes later
-                        setPeers((prev) => ({ ...prev, [senderId]: { peer } }));
-
-                        peer.signal(signal);
+                        createPeer(senderId, false, signal);
                     }
-
-                    // Delete the signal doc after processing so we don't re-process
                     deleteDoc(change.doc.ref);
                 }
             });
         });
 
-        return () => {
-            unsubscribe();
-        };
-    }, [stream, roomId, userId]);
-
-    // 3. Manage Outgoing Connections based on Room Players
-    useEffect(() => {
-        if (!stream) return;
-
-        Object.keys(players).forEach((otherId) => {
-            if (otherId === userId) return;
-
-            // If we are strictly "initiator" based on ID sort
-            if (userId < otherId) {
-                // Check if peer already exists
-                if (!peersRef.current[otherId]) {
-                    // Create initiator peer
-                    console.log(`Initiating connection to ${otherId}`);
-                    const peer = new SimplePeer({
-                        initiator: true,
-                        trickle: false,
-                        stream: stream,
-                    });
-
-                    peer.on("signal", (signalData: any) => {
-                        sendSignal(roomId, otherId, userId, signalData);
-                    });
-
-                    peer.on("stream", (remoteStream: MediaStream) => {
-                        setPeers((prev) => ({ ...prev, [otherId]: { peer, stream: remoteStream } }));
-                        peersRef.current[otherId] = { peer, stream: remoteStream };
-                    });
-
-                    peer.on("close", () => {
-                        removePeer(otherId);
-                    });
-                    peer.on("error", () => {
-                        removePeer(otherId);
-                    });
-
-                    peersRef.current[otherId] = { peer };
-                    setPeers((prev) => ({ ...prev, [otherId]: { peer } }));
+        // Trigger connections
+        Object.values(players).forEach((player) => {
+            if (player.id !== userId && !peersRef.current[player.id]) {
+                if (userId > player.id) {
+                    createPeer(player.id, true);
                 }
             }
         });
 
-        // Cleanup peers that left the room
-        Object.keys(peersRef.current).forEach((peerId) => {
-            if (!players[peerId]) {
-                removePeer(peerId);
+        return () => unsubscribe();
+    }, [stream, userId, roomId, players, createPeer]);
+
+    // Draggable Logic
+    const [position, setPosition] = useState({ x: 20, y: 100 });
+    const isDragging = useRef(false);
+    const dragOffset = useRef({ x: 0, y: 0 });
+    const hasMoved = useRef(false);
+    const dragStartPosition = useRef({ x: 0, y: 0 });
+
+    useEffect(() => {
+        const handleMove = (e: MouseEvent | TouchEvent) => {
+            if (!isDragging.current) return;
+            const clientX = 'touches' in e ? (e as TouchEvent).touches[0].clientX : (e as MouseEvent).clientX;
+            const clientY = 'touches' in e ? (e as TouchEvent).touches[0].clientY : (e as MouseEvent).clientY;
+
+            const dist = Math.sqrt(Math.pow(clientX - dragStartPosition.current.x, 2) + Math.pow(clientY - dragStartPosition.current.y, 2));
+
+            if (dist > 5) {
+                if (e.cancelable) e.preventDefault();
+                hasMoved.current = true;
+                setPosition({
+                    x: clientX - dragOffset.current.x,
+                    y: clientY - dragOffset.current.y
+                });
             }
-        });
+        };
 
-    }, [players, stream, roomId, userId]);
+        const handleEnd = () => {
+            isDragging.current = false;
+        };
 
-    const removePeer = (id: string) => {
-        if (peersRef.current[id]) {
-            peersRef.current[id].peer.destroy();
-            delete peersRef.current[id];
-            setPeers((prev) => {
-                const newPeers = { ...prev };
-                delete newPeers[id];
-                return newPeers;
-            });
-        }
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', handleEnd);
+        window.addEventListener('touchmove', handleMove, { passive: false });
+        window.addEventListener('touchend', handleEnd);
+
+        return () => {
+            window.removeEventListener('mousemove', handleMove);
+            window.removeEventListener('mouseup', handleEnd);
+            window.removeEventListener('touchmove', handleMove);
+            window.removeEventListener('touchend', handleEnd);
+        };
+    }, []);
+
+    const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
+        const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+        const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+
+        isDragging.current = true;
+        hasMoved.current = false;
+        dragStartPosition.current = { x: clientX, y: clientY };
+        dragOffset.current = {
+            x: clientX - position.x,
+            y: clientY - position.y
+        };
     };
 
     const toggleMute = () => {
+        if (hasMoved.current) return;
         if (stream) {
-            stream.getAudioTracks().forEach(track => track.enabled = !track.enabled);
-            setIsMuted(!stream.getAudioTracks()[0].enabled);
+            const track = stream.getAudioTracks()[0];
+            if (track) {
+                track.enabled = !track.enabled;
+                setIsMuted(!track.enabled);
+            }
         }
     };
 
+    if (!stream) return (
+        <div className="fixed top-24 left-4 z-50">
+            <div className="w-12 h-12 rounded-full bg-slate-700 animate-pulse flex items-center justify-center shadow-lg">
+                <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+            </div>
+        </div>
+    );
+
     return (
-        <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+        <div
+            className="fixed z-[9999] cursor-move touch-none select-none"
+            style={{ left: position.x, top: position.y }}
+            onMouseDown={handleStart}
+            onTouchStart={handleStart}
+        >
             {/* Audio Elements (Hidden) */}
             {Object.entries(peers).map(([id, data]) => (
                 data.stream && (
@@ -192,31 +232,28 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
                 )
             ))}
 
-            <div className="bg-slate-900/90 backdrop-blur border border-white/10 p-3 rounded-2xl shadow-2xl pointer-events-auto flex items-center gap-3">
+            <div className="relative group">
                 <button
-                    onClick={() => {
-                        if (stream) {
-                            const newValue = !stream.getAudioTracks()[0].enabled;
-                            stream.getAudioTracks()[0].enabled = newValue;
-                            setIsMuted(!newValue);
-                        }
-                    }}
-                    className={`p-3 rounded-xl transition-all ${isMuted ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'}`}
+                    onClick={toggleMute}
+                    disabled={!stream}
+                    className={`w-12 h-12 rounded-full flex items-center justify-center shadow-2xl border border-white/10 transition-all transform active:scale-95 ${!stream
+                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50'
+                        : isMuted
+                            ? 'bg-red-500/80 text-white hover:bg-red-600'
+                            : 'bg-slate-900/80 text-emerald-400 hover:bg-slate-800 backdrop-blur-md'
+                        }`}
                 >
                     {isMuted ? (
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18" /></svg>
+                        <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18" /></svg>
                     ) : (
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+                        <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
                     )}
                 </button>
-                <div className="flex flex-col">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Voice Chat</span>
-                    <span className="text-xs font-medium text-white flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${Object.keys(peers).length > 0 ? 'bg-emerald-500 animate-pulse' : (stream ? 'bg-amber-500' : 'bg-slate-500')}`}></span>
-                        {Object.keys(peers).length > 0
-                            ? `${Object.keys(peers).length} Peer${Object.keys(peers).length === 1 ? '' : 's'}`
-                            : (stream ? "Listening..." : "Connecting...")}
-                    </span>
+
+                {/* Status Indicator Badge */}
+                <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-slate-900 flex items-center justify-center text-[8px] font-bold text-white shadow-sm ${Object.keys(peers).length > 0 ? 'bg-emerald-500' : (stream ? 'bg-amber-500' : 'bg-slate-500')
+                    }`}>
+                    {Object.keys(peers).length > 0 ? Object.keys(peers).length : ''}
                 </div>
             </div>
         </div>
@@ -224,10 +261,14 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
 }
 
 async function sendSignal(roomId: string, recipientId: string, senderId: string, signalData: any) {
-    const coll = collection(db, "rooms", roomId, "signals", recipientId, "inbox");
-    await addDoc(coll, {
-        senderId,
-        signal: JSON.stringify(signalData),
-        timestamp: Date.now()
-    });
+    try {
+        const coll = collection(db, "rooms", roomId, "signals", recipientId, "inbox");
+        await addDoc(coll, {
+            senderId,
+            signal: JSON.stringify(signalData),
+            timestamp: Date.now()
+        });
+    } catch (e: any) {
+        console.error("Signal Send Error", e);
+    }
 }

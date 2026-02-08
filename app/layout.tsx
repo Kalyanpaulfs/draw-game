@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Draw Game",
+  title: "PixxiPop",
   description: "Real-time multiplayer drawing game",
 };
 
