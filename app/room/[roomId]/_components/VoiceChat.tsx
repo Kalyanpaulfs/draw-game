@@ -39,17 +39,17 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
     const [volume, setVolume] = useState(0);
 
     // Audio Initialization & Volume Meter
-    useEffect(() => {
-        let mounted = true;
+    // Audio Initialization & Volume Meter
+    const initAudio = useCallback(async () => {
+        try {
+            // Initialize AudioContext
+            const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+            if (AudioContext && !audioContextRef.current) {
+                audioContextRef.current = new AudioContext();
+            }
 
-        // Initialize AudioContext
-        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioContext && !audioContextRef.current) {
-            audioContextRef.current = new AudioContext();
-        }
+            const stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
 
-        const handleStreamConfig = (stream: MediaStream) => {
-            if (!mounted) return;
             setStream(stream);
             streamRef.current = stream;
 
@@ -57,6 +57,9 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
             if (audioContextRef.current) {
                 try {
                     const ctx = audioContextRef.current;
+                    // Resume if suspended (important for mobile)
+                    if (ctx.state === 'suspended') await ctx.resume();
+
                     const analyser = ctx.createAnalyser();
                     analyser.fftSize = 256;
                     analyserRef.current = analyser;
@@ -69,7 +72,7 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
                     const dataArray = new Uint8Array(bufferLength);
 
                     const updateVolume = () => {
-                        if (!mounted || !analyserRef.current) return;
+                        if (!analyserRef.current) return;
                         analyserRef.current.getByteFrequencyData(dataArray);
 
                         let sum = 0;
@@ -88,20 +91,19 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
                     console.error("Error setting up audio analyser:", err);
                 }
             }
-        };
+        } catch (err) {
+            console.error("Error accessing microphone:", err);
+        }
+    }, []);
 
-        navigator.mediaDevices.getUserMedia({ video: false, audio: true })
-            .then(handleStreamConfig)
-            .catch((err) => {
-                console.error("Error accessing microphone:", err);
-            });
+    useEffect(() => {
+        initAudio();
 
         return () => {
-            mounted = false;
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
             if (sourceRef.current) {
                 sourceRef.current.disconnect();
-                sourceRef.current = null;
+                // sourceRef.current = null; // Keep ref for cleanup if needed, but disconnect is key
             }
             if (streamRef.current) {
                 streamRef.current.getTracks().forEach(track => track.stop());
@@ -111,53 +113,71 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
                 audioContextRef.current = null;
             }
         };
-    }, []);
+    }, [initAudio]);
 
     // Resume Audio on Visibility Change & Interaction
     useEffect(() => {
         const resumeAudio = async () => {
-            // Always try to resume AudioContext if it exists, ignoring current state to be safe
+            // 1. Resume AudioContext (Hardware access)
             if (audioContextRef.current) {
                 try {
-                    await audioContextRef.current.resume();
+                    if (audioContextRef.current.state === 'suspended') {
+                        await audioContextRef.current.resume();
+                    }
                 } catch (e) {
                     console.error("Error resuming AudioContext:", e);
                 }
             }
 
-            // Resume all peer audio elements that might have been paused
-            const audioElements = document.querySelectorAll('audio');
-            audioElements.forEach(audio => {
-                if (audio.paused && audio.srcObject) {
-                    audio.play().catch(e => console.log("Failed to resume audio element:", e));
+            // 2. Mobile Safari/Chrome "Background Kill" Fix
+            // If the microphone track was stopped by the OS, we must signal a re-acquisition.
+            if (streamRef.current) {
+                const audioTrack = streamRef.current.getAudioTracks()[0];
+                // If track is ended or muted by OS (but not by user), we might need to re-acquire.
+                // Note: 'muted' can happen on incoming calls. 'ended' happens if permissions revoked or strict OS kill.
+                if (audioTrack) {
+                    if (audioTrack.readyState === 'ended') {
+                        console.warn("Audio track ended by OS. Re-acquiring stream...");
+                        if (audioTrack.readyState === 'ended') {
+                            console.warn("Audio track ended by OS. Re-acquiring stream...");
+                            await initAudio();
+                        } else if (audioTrack.muted) {
+                            console.log("Audio track is muted by OS/Browser. Attempting to unmute...");
+                            audioTrack.enabled = true; // Try to force enable
+                        }
+
+                        if (!isMuted && !audioTrack.enabled) {
+                            audioTrack.enabled = true;
+                        }
+                    }
                 }
-            });
 
-            // Ensure local tracks are enabled (if not muted by user)
-            if (streamRef.current && !isMuted) {
-                streamRef.current.getAudioTracks().forEach(track => {
-                    if (!track.enabled) track.enabled = true;
+                // 3. Resume Peer Audio Elements
+                const audioElements = document.querySelectorAll('audio');
+                audioElements.forEach(audio => {
+                    if (audio.paused && audio.srcObject) {
+                        audio.play().catch(e => console.log("Failed to resume audio element:", e));
+                    }
                 });
-            }
-        };
+            };
 
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-                resumeAudio();
-            }
-        };
+            const handleVisibilityChange = () => {
+                if (document.visibilityState === 'visible') {
+                    resumeAudio();
+                }
+            };
 
-        // Add listeners to resume audio context (needed for mobile browsers)
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        window.addEventListener('touchstart', resumeAudio);
-        window.addEventListener('click', resumeAudio);
+            // Add listeners to resume audio context (needed for mobile browsers)
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+            window.addEventListener('touchstart', resumeAudio);
+            window.addEventListener('click', resumeAudio);
 
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-            window.removeEventListener('touchstart', resumeAudio);
-            window.removeEventListener('click', resumeAudio);
-        };
-    }, [isMuted]);
+            return () => {
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
+                window.removeEventListener('touchstart', resumeAudio);
+                window.removeEventListener('click', resumeAudio);
+            };
+        }, [isMuted, initAudio]);
 
     // Helper to create peer (memoized)
     const createPeer = useCallback((id: string, initiator: boolean, incomingSignal?: any) => {
@@ -288,9 +308,16 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
             if (dist > 5) {
                 if (e.cancelable) e.preventDefault();
                 hasMoved.current = true;
+                const newX = clientX - dragOffset.current.x;
+                const newY = clientY - dragOffset.current.y;
+
+                // Clamp to screen boundaries (assuming ~50px width/height for the bubble)
+                const clampedX = Math.max(0, Math.min(window.innerWidth - 60, newX));
+                const clampedY = Math.max(0, Math.min(window.innerHeight - 60, newY));
+
                 setPosition({
-                    x: clientX - dragOffset.current.x,
-                    y: clientY - dragOffset.current.y
+                    x: clampedX,
+                    y: clampedY
                 });
             }
         };
