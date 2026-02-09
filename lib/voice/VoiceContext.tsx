@@ -260,8 +260,29 @@ export function VoiceProvider({
                 }
             }
 
+            // 5. IMPORTANT: Ensure track is enabled and kick audio
+            // This fixes the issue where audio doesn't flow until mute toggle
+            const currentTrack = am.getTrack();
+            if (currentTrack) {
+                // Force enable the track
+                currentTrack.enabled = true;
+                console.log('[VoiceProvider] Track enabled:', currentTrack.enabled, 'readyState:', currentTrack.readyState);
+            }
+
+            // 6. Small delay then re-confirm track on all peers
+            // This "kicks" the audio to start flowing
+            setTimeout(() => {
+                const pm = peerManagerRef.current;
+                const latestTrack = am.getTrack();
+                if (pm && latestTrack) {
+                    pm.replaceTrackOnAllPeers(latestTrack);
+                    console.log('[VoiceProvider] Kicked track on all peers');
+                }
+            }, 500);
+
             setStatus('connected');
             setIsReady(true);
+            setIsMuted(false); // Ensure UI shows unmuted
 
         } catch (err) {
             const error = err instanceof Error ? err : new Error(String(err));
