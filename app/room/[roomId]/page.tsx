@@ -10,7 +10,7 @@ import { Room } from "@/lib/types";
 import { LobbyView } from "./_components/LobbyView";
 import GameView from "./_components/GameView";
 import GameOverView from "./_components/GameOverView";
-import { VoiceChat } from "./_components/VoiceChat";
+
 import { LeaveModal } from "@/app/_components/LeaveModal";
 
 export default function RoomPage({ params }: { params: Promise<{ roomId: string }> }) {
@@ -149,7 +149,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
             <div className="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] bg-purple-500/10 rounded-full blur-[100px] pointer-events-none"></div>
             <div className="fixed bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none"></div>
 
-            <VoiceChat roomId={roomId} userId={userId} players={room.players} />
+
 
             {/* Glass Header - Only show when not playing (Lobby/GameOver) */}
             {room.status !== "playing" && (
