@@ -4,7 +4,6 @@ import { Room, Player } from "@/lib/types";
 import { resetGame } from "@/lib/room-actions";
 import { useUser } from "@/hooks/useUser";
 import Link from "next/link";
-import { useEffect, useState } from "react";
 
 export default function GameOverView({ room }: { room: Room }) {
     const { userId } = useUser();
@@ -12,324 +11,515 @@ export default function GameOverView({ room }: { room: Room }) {
         (a, b) => b.score - a.score
     );
 
-    const [first, second, third, ...others] = players;
-    const [showConfetti, setShowConfetti] = useState(false);
-
-    useEffect(() => {
-        setShowConfetti(true);
-    }, []);
+    const winner = players[0];
 
     const handleReset = async () => {
         await resetGame(room.roomId);
     };
 
+    const medal = (rank: number) => {
+        if (rank === 0) return "🥇";
+        if (rank === 1) return "🥈";
+        if (rank === 2) return "🥉";
+        return null;
+    };
+
     return (
-        <div className="relative min-h-[100dvh] w-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white overflow-x-hidden font-sans selection:bg-white/20">
-            {/* Enhanced Background */}
-            <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[70%] h-[50%] bg-gradient-radial from-indigo-500/15 via-purple-500/10 to-transparent blur-[120px]" />
-                <div className="absolute bottom-0 right-0 w-[50%] h-[40%] bg-gradient-radial from-violet-500/10 to-transparent blur-[100px]" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.03),transparent_50%)]" />
-            </div>
+        <div className="game-over-root">
+            {/* Background glow */}
+            <div className="bg-glow" />
 
-            {/* Premium Confetti */}
-            {showConfetti && (
-                <div className="pointer-events-none absolute inset-0 z-30">
-                    {[...Array(40)].map((_, i) => (
-                        <div
-                            key={i}
-                            className="absolute animate-fall"
-                            style={{
-                                left: `${Math.random() * 100}%`,
-                                width: `${Math.random() * 8 + 4}px`,
-                                height: `${Math.random() * 8 + 4}px`,
-                                backgroundColor: [
-                                    "#FFD700",
-                                    "#FFA500",
-                                    "#FF6B9D",
-                                    "#C77DFF",
-                                    "#4CC9F0",
-                                ][Math.floor(Math.random() * 5)],
-                                borderRadius: Math.random() > 0.5 ? "50%" : "0%",
-                                animationDuration: `${Math.random() * 4 + 4}s`,
-                                animationDelay: `${Math.random() * 2}s`,
-                                opacity: 0.7,
-                                boxShadow: "0 0 10px rgba(255,255,255,0.5)",
-                            }}
-                        />
-                    ))}
-                </div>
-            )}
+            {/* Layout: 3-zone flex column filling viewport */}
+            <div className="layout">
 
-            {/* Main Content - Fixed for mobile browsers */}
-            <main className="relative z-10 w-full max-w-5xl mx-auto px-4 md:px-6 pb-safe">
-                {/* Header Section */}
-                <header className="flex flex-col items-center justify-center pt-8 md:pt-12 pb-6 md:pb-8">
-                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-sm mb-4 animate-fade-in">
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        <span className="text-[10px] md:text-xs font-medium tracking-wider uppercase text-white/60">
-                            Match Complete
-                        </span>
+                {/* ── Zone 1: Fixed top — status + winner ── */}
+                <div className="top-zone">
+                    <div className="match-status">
+                        <span className="status-dot" />
+                        <span className="status-label">Match Complete</span>
                     </div>
 
-                    <h1 className="text-6xl md:text-8xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-white/60 mb-3 animate-slide-up">
-                        VICTORY
-                    </h1>
-
-                    <div className="flex items-center gap-2 opacity-40">
-                        <div className="h-px w-12 bg-gradient-to-r from-transparent via-white to-transparent" />
-                        <div className="w-1 h-1 rounded-full bg-white" />
-                        <div className="h-px w-12 bg-gradient-to-r from-white via-white to-transparent" />
-                    </div>
-                </header>
-
-                {/* Podium Section - Responsive heights */}
-                <section className="w-full flex items-end justify-center gap-2 md:gap-8 mb-6 md:mb-8" style={{ height: 'clamp(280px, 40vh, 400px)' }}>
-                    {/* Second Place */}
-                    <div className="flex-1 max-w-[140px] flex justify-center items-end">
-                        {second && <PodiumStep player={second} rank={2} />}
-                    </div>
-
-                    {/* First Place */}
-                    <div className="flex-1 max-w-[160px] flex justify-center items-end z-10">
-                        {first && <PodiumStep player={first} rank={1} />}
-                    </div>
-
-                    {/* Third Place */}
-                    <div className="flex-1 max-w-[140px] flex justify-center items-end">
-                        {third && <PodiumStep player={third} rank={3} />}
-                    </div>
-                </section>
-
-                {/* Other Players - Compact Card Style */}
-                {others.length > 0 && (
-                    <div className="w-full max-w-2xl mx-auto mb-6 md:mb-8">
-                        <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-4 md:p-6">
-                            <h3 className="text-xs font-semibold tracking-wider uppercase text-white/40 mb-4">
-                                Other Players
-                            </h3>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                {others.map((p, idx) => (
-                                    <div
-                                        key={p.id}
-                                        className="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2.5 border border-white/5 hover:border-white/20 transition-all"
-                                    >
-                                        <div className="flex items-center gap-2 min-w-0">
-                                            <span className="text-xl flex-shrink-0">{p.avatar}</span>
-                                            <span className="text-xs md:text-sm font-medium text-white/80 truncate">
-                                                {p.name}
-                                            </span>
-                                        </div>
-                                        <span className="font-mono text-xs md:text-sm font-bold text-indigo-300 flex-shrink-0">
-                                            {p.score}
-                                        </span>
-                                    </div>
-                                ))}
+                    {winner && (
+                        <div className="winner-hero">
+                            <div className="winner-crown">👑</div>
+                            <div className="winner-avatar">{winner.avatar}</div>
+                            <div className="winner-info">
+                                <div className="winner-name">{winner.name}</div>
+                                <div className="winner-score">{winner.score} <span className="pts-label">pts</span></div>
                             </div>
+                            <div className="winner-subtitle">Winner</div>
+                        </div>
+                    )}
+                </div>
+
+                {/* ── Zone 2: Scrollable scoreboard ── */}
+                <div className="mid-zone">
+                    <div className="scoreboard-card">
+                        <div className="scoreboard-header">
+                            <span className="scoreboard-title">Scoreboard</span>
+                            <span className="scoreboard-count">{players.length} players</span>
+                        </div>
+
+                        <div className="scoreboard-list">
+                            {players.map((player, index) => {
+                                const isWinner = index === 0;
+                                const isCurrentUser = player.id === userId;
+                                return (
+                                    <div
+                                        key={player.id}
+                                        className={`score-row ${isWinner ? "score-row--winner" : ""} ${isCurrentUser ? "score-row--you" : ""}`}
+                                    >
+                                        <div className="score-row-left">
+                                            <span className="score-rank">
+                                                {medal(index) || `#${index + 1}`}
+                                            </span>
+                                            <span className="score-avatar">{player.avatar}</span>
+                                            <div className="score-name-wrap">
+                                                <span className="score-name">{player.name}</span>
+                                                {isCurrentUser && <span className="you-badge">You</span>}
+                                            </div>
+                                        </div>
+                                        <span className="score-value">{player.score}</span>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
-                )}
+                </div>
 
-                {/* Footer Actions - Fixed for mobile bottom bars */}
-                <footer className="w-full flex flex-col items-center gap-4 pb-8 md:pb-12 safe-bottom">
+                {/* ── Zone 3: Fixed bottom — actions ── */}
+                <div className="bottom-zone">
                     {room.hostId === userId ? (
-                        <button
-                            onClick={handleReset}
-                            className="group relative px-8 md:px-12 py-3.5 md:py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-sm md:text-base font-bold tracking-wider uppercase rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg shadow-indigo-500/50 hover:shadow-indigo-500/70"
-                        >
-                            <span className="relative flex items-center gap-2">
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                </svg>
-                                Play Again
-                            </span>
+                        <button onClick={handleReset} className="btn-primary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Play Again
                         </button>
                     ) : (
-                        <div className="flex items-center gap-2 px-6 py-3 bg-white/5 border border-white/10 rounded-xl">
-                            <div className="flex gap-1">
-                                <div className="w-1.5 h-1.5 rounded-full bg-white/60 animate-pulse" style={{ animationDelay: "0s" }} />
-                                <div className="w-1.5 h-1.5 rounded-full bg-white/60 animate-pulse" style={{ animationDelay: "0.2s" }} />
-                                <div className="w-1.5 h-1.5 rounded-full bg-white/60 animate-pulse" style={{ animationDelay: "0.4s" }} />
+                        <div className="waiting-host">
+                            <div className="waiting-dots">
+                                <span className="dot dot-1" />
+                                <span className="dot dot-2" />
+                                <span className="dot dot-3" />
                             </div>
-                            <span className="text-xs font-medium tracking-wider text-white/50 uppercase">
-                                Waiting for host
-                            </span>
+                            <span>Waiting for host</span>
                         </div>
                     )}
 
-                    <Link
-                        href="/"
-                        className="group flex items-center gap-2 text-xs md:text-sm font-medium text-white/40 hover:text-white transition-colors uppercase tracking-wider"
-                    >
-                        <svg className="w-3 h-3 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                        </svg>
-                        Back to Menu
+                    <Link href="/" className="btn-secondary">
+                        ← Back to Menu
                     </Link>
-                </footer>
-            </main>
+                </div>
+            </div>
 
-            {/* Global Styles */}
-            <style jsx global>{`
-                @keyframes fall {
-                    0% { 
-                        transform: translateY(-20px) rotate(0deg); 
-                        opacity: 0; 
-                    }
-                    10% { 
-                        opacity: 1; 
-                    }
-                    100% { 
-                        transform: translateY(100vh) rotate(720deg); 
-                        opacity: 0; 
-                    }
+            <style jsx>{`
+                .game-over-root {
+                    position: relative;
+                    width: 100%;
+                    height: 100%;
+                    background: linear-gradient(170deg, #0c1022 0%, #111833 40%, #0f1429 70%, #0d0f1a 100%);
+                    color: #e2e8f0;
+                    overflow: hidden;
+                    font-family: system-ui, -apple-system, sans-serif;
                 }
-                
-                @keyframes fade-in {
-                    from { 
-                        opacity: 0; 
-                        transform: translateY(10px); 
+
+                .bg-glow {
+                    position: fixed;
+                    inset: 0;
+                    pointer-events: none;
+                    background:
+                        radial-gradient(ellipse 70% 50% at 50% 15%, rgba(99, 102, 241, 0.18) 0%, transparent 70%),
+                        radial-gradient(ellipse 50% 45% at 80% 70%, rgba(139, 92, 246, 0.10) 0%, transparent 70%),
+                        radial-gradient(ellipse 40% 35% at 20% 85%, rgba(79, 70, 229, 0.07) 0%, transparent 70%);
+                }
+
+                /* ── 3-Zone Layout ── */
+                .layout {
+                    position: relative;
+                    z-index: 1;
+                    display: flex;
+                    flex-direction: column;
+                    height: 100%;
+                    max-width: 440px;
+                    margin: 0 auto;
+                    padding: 0 16px;
+                    padding-top: env(safe-area-inset-top, 0px);
+                    padding-bottom: env(safe-area-inset-bottom, 0px);
+                }
+
+                /* ── Zone 1: Top (fixed) ── */
+                .top-zone {
+                    flex-shrink: 0;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    padding-top: 12px;
+                }
+
+                .match-status {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    margin-bottom: 14px;
+                }
+                .status-dot {
+                    width: 6px;
+                    height: 6px;
+                    border-radius: 50%;
+                    background: #34d399;
+                    box-shadow: 0 0 8px #34d39980;
+                    animation: pulse-dot 2s ease-in-out infinite;
+                }
+                .status-label {
+                    font-size: 11px;
+                    font-weight: 600;
+                    letter-spacing: 0.12em;
+                    text-transform: uppercase;
+                    color: rgba(255,255,255,0.4);
+                }
+
+                .winner-hero {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    text-align: center;
+                    margin-bottom: 16px;
+                }
+                .winner-crown {
+                    font-size: 24px;
+                    margin-bottom: 2px;
+                    animation: gentle-bounce 3s ease-in-out infinite;
+                }
+                .winner-avatar {
+                    font-size: 48px;
+                    line-height: 1;
+                    filter: drop-shadow(0 0 20px rgba(251, 191, 36, 0.25));
+                    margin-bottom: 6px;
+                }
+                .winner-info {
+                    display: flex;
+                    align-items: baseline;
+                    gap: 8px;
+                    margin-bottom: 4px;
+                }
+                .winner-name {
+                    font-size: 18px;
+                    font-weight: 800;
+                    letter-spacing: -0.02em;
+                    color: #fff;
+                }
+                .winner-score {
+                    font-size: 18px;
+                    font-weight: 900;
+                    letter-spacing: -0.02em;
+                    background: linear-gradient(to bottom, #fbbf24, #d97706);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    background-clip: text;
+                }
+                .pts-label {
+                    font-size: 11px;
+                    font-weight: 600;
+                    letter-spacing: 0.05em;
+                    opacity: 0.7;
+                }
+                .winner-subtitle {
+                    font-size: 9px;
+                    font-weight: 700;
+                    letter-spacing: 0.18em;
+                    text-transform: uppercase;
+                    color: #fbbf24;
+                    padding: 2px 10px;
+                    border: 1px solid rgba(251, 191, 36, 0.25);
+                    border-radius: 100px;
+                    background: rgba(251, 191, 36, 0.08);
+                }
+
+                /* ── Zone 2: Middle (scrollable) ── */
+                .mid-zone {
+                    flex: 1;
+                    min-height: 0; /* critical for flex overflow */
+                    display: flex;
+                    flex-direction: column;
+                    padding-bottom: 12px;
+                }
+
+                .scoreboard-card {
+                    display: flex;
+                    flex-direction: column;
+                    min-height: 0; /* allow shrink for overflow */
+                    height: 100%;
+                    background: rgba(255,255,255,0.025);
+                    border: 1px solid rgba(255,255,255,0.06);
+                    border-radius: 16px;
+                    padding: 14px;
+                    padding-bottom: 10px;
+                }
+                .scoreboard-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: baseline;
+                    margin-bottom: 10px;
+                    padding: 0 2px;
+                    flex-shrink: 0;
+                }
+                .scoreboard-title {
+                    font-size: 12px;
+                    font-weight: 700;
+                    letter-spacing: 0.08em;
+                    text-transform: uppercase;
+                    color: rgba(255,255,255,0.4);
+                }
+                .scoreboard-count {
+                    font-size: 11px;
+                    font-weight: 500;
+                    color: rgba(255,255,255,0.2);
+                }
+                .scoreboard-list {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 5px;
+                    overflow-y: auto;
+                    min-height: 0;
+                    flex: 1;
+                    -webkit-overflow-scrolling: touch;
+                    scrollbar-width: thin;
+                    scrollbar-color: rgba(255,255,255,0.08) transparent;
+                }
+                .scoreboard-list::-webkit-scrollbar {
+                    width: 4px;
+                }
+                .scoreboard-list::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+                .scoreboard-list::-webkit-scrollbar-thumb {
+                    background: rgba(255,255,255,0.08);
+                    border-radius: 4px;
+                }
+
+                /* ── Score Row ── */
+                .score-row {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    padding: 8px 12px;
+                    border-radius: 12px;
+                    background: rgba(255,255,255,0.03);
+                    border: 1px solid rgba(255,255,255,0.04);
+                    flex-shrink: 0;
+                    transition: background 0.2s, border-color 0.2s;
+                }
+                .score-row:hover {
+                    background: rgba(255,255,255,0.05);
+                    border-color: rgba(255,255,255,0.08);
+                }
+                .score-row--winner {
+                    background: rgba(251, 191, 36, 0.06);
+                    border-color: rgba(251, 191, 36, 0.15);
+                }
+                .score-row--winner:hover {
+                    background: rgba(251, 191, 36, 0.09);
+                    border-color: rgba(251, 191, 36, 0.22);
+                }
+                .score-row--you {
+                    box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.2);
+                }
+                .score-row-left {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    min-width: 0;
+                }
+                .score-rank {
+                    width: 26px;
+                    font-size: 13px;
+                    font-weight: 700;
+                    color: rgba(255,255,255,0.3);
+                    text-align: center;
+                    flex-shrink: 0;
+                }
+                .score-row--winner .score-rank {
+                    font-size: 15px;
+                }
+                .score-avatar {
+                    font-size: 22px;
+                    line-height: 1;
+                    flex-shrink: 0;
+                }
+                .score-name-wrap {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    min-width: 0;
+                }
+                .score-name {
+                    font-size: 13px;
+                    font-weight: 600;
+                    color: rgba(255,255,255,0.8);
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+                .score-row--winner .score-name {
+                    color: #fff;
+                }
+                .you-badge {
+                    font-size: 9px;
+                    font-weight: 700;
+                    letter-spacing: 0.08em;
+                    text-transform: uppercase;
+                    color: #818cf8;
+                    background: rgba(99, 102, 241, 0.12);
+                    border: 1px solid rgba(99, 102, 241, 0.2);
+                    padding: 1px 6px;
+                    border-radius: 100px;
+                    flex-shrink: 0;
+                }
+                .score-value {
+                    font-size: 15px;
+                    font-weight: 800;
+                    font-variant-numeric: tabular-nums;
+                    color: rgba(255,255,255,0.6);
+                    flex-shrink: 0;
+                    margin-left: 10px;
+                }
+                .score-row--winner .score-value {
+                    color: #fbbf24;
+                }
+
+                /* ── Zone 3: Bottom (fixed) ── */
+                .bottom-zone {
+                    flex-shrink: 0;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 10px;
+                    padding: 16px 0;
+                    padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px));
+                }
+
+                .btn-primary {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 8px;
+                    width: 100%;
+                    max-width: 280px;
+                    padding: 13px 24px;
+                    font-size: 13px;
+                    font-weight: 700;
+                    letter-spacing: 0.05em;
+                    text-transform: uppercase;
+                    color: #fff;
+                    background: linear-gradient(135deg, #6366f1, #7c3aed);
+                    border: none;
+                    border-radius: 14px;
+                    cursor: pointer;
+                    transition: transform 0.15s, box-shadow 0.25s;
+                    box-shadow: 0 4px 24px rgba(99, 102, 241, 0.35);
+                }
+                .btn-primary:hover {
+                    transform: scale(1.02);
+                    box-shadow: 0 6px 32px rgba(99, 102, 241, 0.5);
+                }
+                .btn-primary:active {
+                    transform: scale(0.97);
+                }
+                .btn-secondary {
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: rgba(255,255,255,0.3);
+                    text-decoration: none;
+                    letter-spacing: 0.04em;
+                    padding: 4px 12px;
+                    border-radius: 8px;
+                    transition: color 0.2s, background 0.2s;
+                }
+                .btn-secondary:hover {
+                    color: rgba(255,255,255,0.6);
+                    background: rgba(255,255,255,0.04);
+                }
+
+                .waiting-host {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    padding: 12px 20px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    letter-spacing: 0.06em;
+                    text-transform: uppercase;
+                    color: rgba(255,255,255,0.4);
+                    background: rgba(255,255,255,0.04);
+                    border: 1px solid rgba(255,255,255,0.08);
+                    border-radius: 14px;
+                }
+                .waiting-dots {
+                    display: flex;
+                    gap: 4px;
+                }
+                .dot {
+                    width: 5px;
+                    height: 5px;
+                    border-radius: 50%;
+                    background: rgba(255,255,255,0.4);
+                    animation: pulse-dot 1.4s ease-in-out infinite;
+                }
+                .dot-2 { animation-delay: 0.2s; }
+                .dot-3 { animation-delay: 0.4s; }
+
+                @keyframes pulse-dot {
+                    0%, 100% { opacity: 0.4; transform: scale(1); }
+                    50% { opacity: 1; transform: scale(1.3); }
+                }
+                @keyframes gentle-bounce {
+                    0%, 100% { transform: translateY(0); }
+                    50% { transform: translateY(-3px); }
+                }
+
+                /* ── Desktop ── */
+                @media (min-width: 640px) {
+                    .layout {
+                        max-width: 480px;
+                        padding: 0 24px;
                     }
-                    to { 
-                        opacity: 1; 
-                        transform: translateY(0); 
+                    .top-zone {
+                        padding-top: 24px;
                     }
-                }
-                
-                @keyframes slide-up {
-                    from { 
-                        opacity: 0; 
-                        transform: translateY(20px); 
+                    .winner-avatar {
+                        font-size: 56px;
                     }
-                    to { 
-                        opacity: 1; 
-                        transform: translateY(0); 
+                    .winner-name {
+                        font-size: 20px;
                     }
-                }
-                
-                .animate-fall {
-                    animation: fall linear forwards;
-                }
-                
-                .animate-fade-in {
-                    animation: fade-in 0.8s ease-out forwards;
-                }
-                
-                .animate-slide-up {
-                    animation: slide-up 0.8s ease-out forwards;
-                }
-                
-                .safe-bottom {
-                    padding-bottom: max(2rem, env(safe-area-inset-bottom));
-                }
-                
-                @supports (padding: max(0px)) {
-                    .pb-safe {
-                        padding-bottom: max(1rem, env(safe-area-inset-bottom));
+                    .winner-score {
+                        font-size: 20px;
+                    }
+                    .winner-hero {
+                        margin-bottom: 20px;
+                    }
+                    .scoreboard-card {
+                        padding: 16px;
+                    }
+                    .score-row {
+                        padding: 10px 14px;
+                    }
+                    .score-name {
+                        font-size: 14px;
+                    }
+                    .score-value {
+                        font-size: 16px;
+                    }
+                    .btn-primary {
+                        padding: 14px 28px;
+                        max-width: 300px;
+                    }
+                    .bottom-zone {
+                        padding: 18px 0 24px;
                     }
                 }
             `}</style>
-        </div>
-    );
-}
-
-function PodiumStep({
-    player,
-    rank,
-}: {
-    player: Player;
-    rank: 1 | 2 | 3;
-}) {
-    const isWinner = rank === 1;
-
-    const config = {
-        1: {
-            color: "from-amber-400 via-yellow-300 to-amber-500",
-            textColor: "text-amber-400",
-            height: "h-[60%]",
-            bgGradient: "bg-gradient-to-b from-amber-500/20 via-amber-600/10 to-transparent",
-            borderColor: "border-amber-400/30",
-            icon: "👑",
-            glowColor: "shadow-amber-500/50",
-            avatarSize: "text-5xl md:text-7xl",
-            rankText: "1st",
-        },
-        2: {
-            color: "from-slate-300 via-gray-200 to-slate-400",
-            textColor: "text-slate-300",
-            height: "h-[45%]",
-            bgGradient: "bg-gradient-to-b from-slate-400/15 via-slate-500/8 to-transparent",
-            borderColor: "border-slate-400/20",
-            icon: "🥈",
-            glowColor: "shadow-slate-500/30",
-            avatarSize: "text-4xl md:text-5xl",
-            rankText: "2nd",
-        },
-        3: {
-            color: "from-orange-400 via-amber-600 to-orange-500",
-            textColor: "text-orange-400",
-            height: "h-[35%]",
-            bgGradient: "bg-gradient-to-b from-orange-500/15 via-orange-600/8 to-transparent",
-            borderColor: "border-orange-400/20",
-            icon: "🥉",
-            glowColor: "shadow-orange-500/30",
-            avatarSize: "text-4xl md:text-5xl",
-            rankText: "3rd",
-        },
-    }[rank];
-
-    return (
-        <div className="w-full flex flex-col items-center justify-end h-full group">
-            {/* Avatar & Medal */}
-            <div className={`flex flex-col items-center mb-3 md:mb-4 transition-transform duration-500 ${isWinner ? 'group-hover:-translate-y-2' : 'group-hover:-translate-y-1'}`}>
-                {isWinner && (
-                    <div className="text-3xl md:text-4xl mb-2 animate-bounce">
-                        {config.icon}
-                    </div>
-                )}
-
-                <div className={`relative ${config.avatarSize} filter drop-shadow-2xl mb-2`}>
-                    <div className={`absolute inset-0 blur-xl opacity-50 bg-gradient-to-b ${config.color}`} />
-                    <div className="relative">{player.avatar}</div>
-                </div>
-
-                {!isWinner && (
-                    <span className="text-xl md:text-2xl mb-1">{config.icon}</span>
-                )}
-            </div>
-
-            {/* Podium Bar */}
-            <div className={`
-                w-full ${config.height} relative
-                flex flex-col items-center justify-start pt-4 md:pt-6 px-2
-                ${config.bgGradient}
-                border-t-2 border-x ${config.borderColor}
-                backdrop-blur-md rounded-t-xl
-                transition-all duration-500
-                ${isWinner ? 'group-hover:scale-105' : 'group-hover:scale-102'}
-                shadow-2xl ${config.glowColor}
-            `}>
-                {/* Rank Badge */}
-                <div className={`absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-gradient-to-r ${config.color} text-slate-900 text-[10px] md:text-xs font-black tracking-wider shadow-lg`}>
-                    {config.rankText}
-                </div>
-
-                {/* Score */}
-                <div className={`font-black text-3xl md:text-5xl tracking-tighter bg-gradient-to-b ${config.color} bg-clip-text text-transparent mb-1 md:mb-2 drop-shadow-lg`}>
-                    {player.score}
-                </div>
-
-                {/* Player Name */}
-                <div className="text-[10px] md:text-xs font-semibold uppercase tracking-widest text-white/70 max-w-[90%] truncate text-center px-1">
-                    {player.name}
-                </div>
-
-                {/* Shine Effect */}
-                <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white/10 to-transparent rounded-t-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-
-                {/* Bottom Fade */}
-                <div className="absolute bottom-0 inset-x-0 h-16 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent pointer-events-none" />
-            </div>
         </div>
     );
 }

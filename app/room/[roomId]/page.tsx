@@ -27,7 +27,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
     const [showLeaveModal, setShowLeaveModal] = useState(false);
 
     useEffect(() => {
-         
+
         if (userName) setJoinName(userName);
     }, [userName]);
 
@@ -222,7 +222,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
                 )}
 
                 {/* Main Content Area */}
-                <main className={`relative z-10 flex-1 flex flex-col items-center justify-center w-full mx-auto ${room.status === "playing" ? "h-full p-0 max-w-none" : "p-4 md:p-6 max-w-7xl"}`}>
+                <main className={`relative z-10 flex-1 flex flex-col items-center w-full mx-auto ${room.status === "playing" ? "h-full p-0 max-w-none justify-center" : room.status === "finished" ? "p-0 max-w-none overflow-hidden" : "p-4 md:p-6 max-w-7xl justify-center"}`}>
                     {room.status === "playing" ? (
                         <div className="w-full h-full">
                             <GameView room={room} />
