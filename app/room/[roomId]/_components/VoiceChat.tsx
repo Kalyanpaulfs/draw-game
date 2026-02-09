@@ -123,9 +123,28 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
                     const senderId = data.senderId;
                     const signal = JSON.parse(data.signal);
 
+                    // FIX: If we receive a new OFFER from an existing peer, it means they reloaded.
+                    // We must destroy the old connection and accept the new one.
                     if (peersRef.current[senderId]) {
-                        peersRef.current[senderId].peer.signal(signal);
+                        if (signal.type === "offer") {
+                            console.log(`Received new offer from existing peer ${senderId}. Resetting connection.`);
+                            if (peersRef.current[senderId].peer) {
+                                peersRef.current[senderId].peer.destroy();
+                            }
+                            delete peersRef.current[senderId];
+                            setPeers(prev => {
+                                const next = { ...prev };
+                                delete next[senderId];
+                                return next;
+                            });
+                            // Create new peer as non-initiator to accept the offer
+                            createPeer(senderId, false, signal);
+                        } else {
+                            // Normal signaling for existing connection (answer, candidate)
+                            peersRef.current[senderId].peer.signal(signal);
+                        }
                     } else {
+                        // New connection
                         createPeer(senderId, false, signal);
                     }
                     deleteDoc(change.doc.ref);
