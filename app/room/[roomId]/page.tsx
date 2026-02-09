@@ -6,10 +6,12 @@ import Link from "next/link";
 import { useRoom } from "@/hooks/useRoom";
 import { useUser } from "@/hooks/useUser";
 import { joinRoom } from "@/lib/room-actions";
+import { Room } from "@/lib/types";
 import { LobbyView } from "./_components/LobbyView";
 import GameView from "./_components/GameView";
 import GameOverView from "./_components/GameOverView";
 import { VoiceChat } from "./_components/VoiceChat";
+import { LeaveModal } from "@/app/_components/LeaveModal";
 
 export default function RoomPage({ params }: { params: Promise<{ roomId: string }> }) {
     const { roomId } = use(params);
@@ -20,6 +22,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
     const [joinName, setJoinName] = useState("");
     const [isJoining, setIsJoining] = useState(false);
     const [joinError, setJoinError] = useState("");
+    const [showLeaveModal, setShowLeaveModal] = useState(false);
 
     useEffect(() => {
         // eslint-disable-next-line
@@ -203,14 +206,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
                         </button>
 
                         <button
-                            onClick={() => {
-                                // Simple leave confirm 
-                                if (confirm("Leave room?")) {
-                                    import("@/lib/room-actions").then(mod => {
-                                        mod.leaveRoom(roomId, userId).then(() => router.push("/"));
-                                    });
-                                }
-                            }}
+                            onClick={() => setShowLeaveModal(true)}
                             className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800/50 hover:bg-red-500/10 text-slate-400 hover:text-red-400 border border-white/5 hover:border-red-500/20 transition-all duration-300 group"
                             title="Leave Room"
                         >
@@ -232,6 +228,16 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
                     <LobbyView room={room} userId={userId} roomId={roomId} />
                 )}
             </main>
+
+            <LeaveModal
+                isOpen={showLeaveModal}
+                onClose={() => setShowLeaveModal(false)}
+                onConfirm={() => {
+                    import("@/lib/room-actions").then(mod => {
+                        mod.leaveRoom(roomId, userId).then(() => router.push("/"));
+                    });
+                }}
+            />
         </div >
     );
 }
