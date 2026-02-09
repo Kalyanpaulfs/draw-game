@@ -77,8 +77,18 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
                 streamRef.current.getTracks().forEach(t => t.stop());
             }
 
+            // Constraints for recovery
+            const constraints = {
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                },
+                video: false
+            };
+
             // Get new stream
-            const newStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+            const newStream = await navigator.mediaDevices.getUserMedia(constraints);
 
             // Handle critical track replacement for peers
             handleNewStream(newStream);
@@ -323,6 +333,11 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
                         { urls: 'stun:stun.l.google.com:19302' },
                         { urls: 'stun:global.stun.twilio.com:3478' }
                     ]
+                },
+                // SDP Transform to limit Bitrate (Bandwidth Optimization)
+                sdpTransform: (sdp: string) => {
+                    // Limit OPUS bitrate to 32kbps (good quality, low latency)
+                    return sdp.replace("a=fmtp:111 minptime=10;useinbandfec=1", "a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=32000");
                 }
             });
 
