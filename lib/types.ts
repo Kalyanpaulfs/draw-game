@@ -27,6 +27,7 @@ export type TurnState = {
     candidateWords: string[];
     secretWord: string;
     correctGuessers: string[];
+    scores: Record<string, number>; // Points awarded in this turn (userId -> points)
     hintIndices?: number[];
     difficulty?: Difficulty;
 };

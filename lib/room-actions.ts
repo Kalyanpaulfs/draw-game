@@ -138,6 +138,7 @@ export async function startGame(roomId: string) {
             candidateWords: [], // Wait for difficulty selection
             secretWord: "", // Will be set in Phase 4
             correctGuessers: [],
+            scores: {},
         },
     });
 
@@ -233,6 +234,7 @@ export async function nextTurn(roomId: string) {
                     candidateWords: [],
                     secretWord: "",
                     correctGuessers: [],
+                    scores: {},
                 }
             });
 
@@ -321,6 +323,7 @@ export async function selectWord(roomId: string, word: string) {
             "turn.deadline": deadline,
             "turn.candidateWords": [], // Clear candidates to hide them
             "turn.correctGuessers": [],
+            "turn.scores": {},
             "turn.hintIndices": Array.from({ length: word.length }, (_, i) => i).sort(() => Math.random() - 0.5),
         });
     });
@@ -386,7 +389,8 @@ export async function submitGuess(roomId: string, userId: string, userName: stri
                 const updates: Record<string, any> = {
                     [`players.${userId}.score`]: currentScore + points,
                     [`players.${room.turn.drawerId}.score`]: drawerScore + drawerIncrement,
-                    "turn.correctGuessers": newCorrectGuessers
+                    "turn.correctGuessers": newCorrectGuessers,
+                    [`turn.scores.${userId}`]: points
                 };
 
                 // Check for early round end
@@ -409,7 +413,8 @@ export async function submitGuess(roomId: string, userId: string, userName: stri
                         userName: "SYSTEM",
                         text: "All players guessed! Round ending...",
                         isSystem: true,
-                        timestamp: Timestamp.now()
+                        // Add 1ms offset to ensure it follows the individual guess message
+                        timestamp: Timestamp.fromMillis(Date.now() + 1)
                     });
                 }
 
@@ -455,9 +460,11 @@ export async function submitGuess(roomId: string, userId: string, userName: stri
             }
         }); // End runTransaction
 
-        // Execution successful, send messages
+        // Execution successful, send messages sequentially to preserve order
         if (messagesToSend.length > 0) {
-            await Promise.all(messagesToSend.map(msg => addDoc(messagesRef, msg)));
+            for (const msg of messagesToSend) {
+                await addDoc(messagesRef, msg);
+            }
         }
 
     } catch (e) {

@@ -60,7 +60,7 @@ export function RoundResultOverlay({ room }: { room: Room }) {
                                                 {player.name}
                                             </div>
                                             <div className="text-[10px] text-emerald-400 font-medium">
-                                                +{Math.round(50 + (0.5 * 50))} pts
+                                                +{room.turn?.scores?.[playerId] || 0} pts
                                             </div>
                                         </div>
                                     </div>
