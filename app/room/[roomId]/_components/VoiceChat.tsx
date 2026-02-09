@@ -56,8 +56,20 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
                 audioContextRef.current = new AudioContext();
             }
 
+            // 1. Audio Constraints for Voice Quality (Optimized)
+            const constraints = {
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                    channelCount: 1,
+                    sampleRate: 48000
+                },
+                video: false
+            };
+
             // Get initial stream
-            const newStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+            const newStream = await navigator.mediaDevices.getUserMedia(constraints);
 
             // Set up tracks
             handleNewStream(newStream);
