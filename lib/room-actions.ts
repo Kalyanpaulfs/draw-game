@@ -2,7 +2,7 @@ import { doc, setDoc, getDoc, updateDoc, Timestamp, runTransaction, collection, 
 
 import { db } from "./firebase";
 import { Room, GameConfig, Player, Difficulty } from "./types";
-import { generateRoomId } from "./game-utils";
+import { generateRoomId, getLevenshteinDistance } from "./game-utils";
 import { getRandomWords } from "./words";
 
 export async function createRoom(hostId: string, hostName: string, config: GameConfig): Promise<string> {
@@ -307,14 +307,8 @@ export async function submitGuess(roomId: string, userId: string, userName: stri
 
             // 1. Guesser Score: Ratio-based (Works for ANY round duration)
             // Formula: Base(50) + (TimeRatio * 50)
-            // Example: 60s round. Guess at 54s (Ratio 0.9) -> 50 + 45 = 95 pts.
-            // Example: 30s round. Guess at 27s (Ratio 0.9) -> 50 + 45 = 95 pts.
             const now = Date.now();
             const deadline = room.turn.deadline.toMillis();
-
-            // Calculate total duration based on phase (default 60s if not stored)
-            // Future-proof: We should store turn duration in room.turn to be exact, 
-            // but for now 60s is the fixed draw time.
             const totalDuration = 60 * 1000;
 
             const timeLeft = Math.max(0, deadline - now);
@@ -323,20 +317,12 @@ export async function submitGuess(roomId: string, userId: string, userName: stri
             const points = Math.round(50 + (timeRatio * 50));
 
             // 2. Drawer Score: Percentage of audience reached
-            // Formula: (CorrectGuesses / TotalPotentialGuessers) * 100
-            // This scales automatically with room size.
             const totalPlayers = Object.keys(room.players).length;
             const potentialGuessers = Math.max(1, totalPlayers - 1); // Exclude drawer
 
             const newCorrectGuessers = [...(room.turn.correctGuessers || []), userId];
-            const correctCount = newCorrectGuessers.length;
 
             // Drawer gets score based on NEW total percentage
-            // We recalculate drawer score significantly? 
-            // Better: Just set drawer score to (Count / Total) * 100 * RoundWeight?
-            // Actually, simply: Drawer Score for this round = (Count/Total) * 100.
-            // But we add incrementally.
-            // Increment = (1 / Potential) * 100.
             const drawerIncrement = Math.round((1 / potentialGuessers) * 100);
 
             const currentScore = room.players[userId]?.score || 0;
@@ -375,14 +361,46 @@ export async function submitGuess(roomId: string, userId: string, userName: stri
             });
 
         } else {
-            // Wrong guess
-            await addDoc(messagesRef, {
-                userId,
-                userName,
-                text,
-                isSystem: false,
-                timestamp: Timestamp.now()
-            });
+            // Wrong guess - CHECK FOR CLOSE GUESS
+            const distance = getLevenshteinDistance(secret, guess);
+            const len = secret.length;
+            let threshold = 0;
+
+            // User Rule: 5->1, 5-7->2, >7->3
+            if (len < 5) threshold = 1;
+            else if (len <= 7) threshold = 2;
+            else threshold = 3;
+
+            if (distance <= threshold && distance > 0) {
+                // Send PRIVATE system message to guesser
+                await addDoc(messagesRef, {
+                    userId: "SYSTEM",
+                    userName: "SYSTEM",
+                    text: `You are very close!`,
+                    isSystem: true,
+                    timestamp: Timestamp.now(),
+                    visibleTo: [userId]
+                });
+
+                // ALSO make the user's guess PRIVATE
+                await addDoc(messagesRef, {
+                    userId,
+                    userName,
+                    text,
+                    isSystem: false,
+                    timestamp: Timestamp.now(),
+                    visibleTo: [userId]
+                });
+            } else {
+                // Normal public chat message for the wrong guess
+                await addDoc(messagesRef, {
+                    userId,
+                    userName,
+                    text,
+                    isSystem: false,
+                    timestamp: Timestamp.now()
+                });
+            }
         }
     });
 }
