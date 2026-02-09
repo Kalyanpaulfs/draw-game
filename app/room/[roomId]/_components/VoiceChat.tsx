@@ -31,27 +31,133 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
     const streamRef = useRef<MediaStream | null>(null);
     const [isMuted, setIsMuted] = useState(false);
 
-    // Audio Initialization
+    // Audio Context & Analyser refs
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const analyserRef = useRef<AnalyserNode | null>(null);
+    const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+    const rafRef = useRef<number | null>(null); // Animation frame reference
+    const [volume, setVolume] = useState(0);
+
+    // Audio Initialization & Volume Meter
     useEffect(() => {
         let mounted = true;
-        navigator.mediaDevices.getUserMedia({ video: false, audio: true })
-            .then((stream) => {
-                if (mounted) {
-                    setStream(stream);
-                    streamRef.current = stream;
+
+        // Initialize AudioContext
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContext && !audioContextRef.current) {
+            audioContextRef.current = new AudioContext();
+        }
+
+        const handleStreamConfig = (stream: MediaStream) => {
+            if (!mounted) return;
+            setStream(stream);
+            streamRef.current = stream;
+
+            // Setup Analyser if context exists
+            if (audioContextRef.current) {
+                try {
+                    const ctx = audioContextRef.current;
+                    const analyser = ctx.createAnalyser();
+                    analyser.fftSize = 256;
+                    analyserRef.current = analyser;
+
+                    const source = ctx.createMediaStreamSource(stream);
+                    source.connect(analyser);
+                    sourceRef.current = source;
+
+                    const bufferLength = analyser.frequencyBinCount;
+                    const dataArray = new Uint8Array(bufferLength);
+
+                    const updateVolume = () => {
+                        if (!mounted || !analyserRef.current) return;
+                        analyserRef.current.getByteFrequencyData(dataArray);
+
+                        let sum = 0;
+                        // Focus on voice frequency range roughly (lower bins)
+                        for (let i = 0; i < bufferLength; i++) {
+                            sum += dataArray[i];
+                        }
+                        const average = sum / bufferLength;
+                        // Amplify for better visual feedback
+                        setVolume(Math.min(100, average * 2.5));
+
+                        rafRef.current = requestAnimationFrame(updateVolume);
+                    };
+                    updateVolume();
+                } catch (err) {
+                    console.error("Error setting up audio analyser:", err);
                 }
-            })
+            }
+        };
+
+        navigator.mediaDevices.getUserMedia({ video: false, audio: true })
+            .then(handleStreamConfig)
             .catch((err) => {
                 console.error("Error accessing microphone:", err);
             });
 
         return () => {
             mounted = false;
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+            if (sourceRef.current) {
+                sourceRef.current.disconnect();
+                sourceRef.current = null;
+            }
             if (streamRef.current) {
                 streamRef.current.getTracks().forEach(track => track.stop());
             }
+            if (audioContextRef.current) {
+                audioContextRef.current.close().catch(console.error);
+                audioContextRef.current = null;
+            }
         };
     }, []);
+
+    // Resume Audio on Visibility Change & Interaction
+    useEffect(() => {
+        const resumeAudio = async () => {
+            // Always try to resume AudioContext if it exists, ignoring current state to be safe
+            if (audioContextRef.current) {
+                try {
+                    await audioContextRef.current.resume();
+                } catch (e) {
+                    console.error("Error resuming AudioContext:", e);
+                }
+            }
+
+            // Resume all peer audio elements that might have been paused
+            const audioElements = document.querySelectorAll('audio');
+            audioElements.forEach(audio => {
+                if (audio.paused && audio.srcObject) {
+                    audio.play().catch(e => console.log("Failed to resume audio element:", e));
+                }
+            });
+
+            // Ensure local tracks are enabled (if not muted by user)
+            if (streamRef.current && !isMuted) {
+                streamRef.current.getAudioTracks().forEach(track => {
+                    if (!track.enabled) track.enabled = true;
+                });
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                resumeAudio();
+            }
+        };
+
+        // Add listeners to resume audio context (needed for mobile browsers)
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('touchstart', resumeAudio);
+        window.addEventListener('click', resumeAudio);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('touchstart', resumeAudio);
+            window.removeEventListener('click', resumeAudio);
+        };
+    }, [isMuted]);
 
     // Helper to create peer (memoized)
     const createPeer = useCallback((id: string, initiator: boolean, incomingSignal?: any) => {
@@ -268,6 +374,16 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
                             : 'bg-slate-900/80 text-emerald-400 hover:bg-slate-800 backdrop-blur-md'
                         }`}
                 >
+                    {/* Volume Meter Ring */}
+                    {!isMuted && stream && (
+                        <div
+                            className="absolute inset-0 rounded-full border-2 border-emerald-500/50 pointer-events-none transition-all duration-75 ease-out"
+                            style={{
+                                transform: `scale(${1 + (volume / 100) * 0.4})`,
+                                opacity: Math.max(0.1, volume / 100)
+                            }}
+                        />
+                    )}
                     {isMuted ? (
                         <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18" /></svg>
                     ) : (
