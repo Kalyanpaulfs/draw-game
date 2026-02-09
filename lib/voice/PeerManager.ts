@@ -149,16 +149,19 @@ export class PeerManager {
         // Add local audio track if available
         const audioManager = getAudioManager();
         const track = audioManager.getTrack();
+        const stream = audioManager.getStream();
 
-        if (track) {
-            const stream = audioManager.getStream();
-            if (stream) {
-                const sender = connection.addTrack(track, stream);
-                peerInfo.audioSender = sender;
-            }
+        if (track && stream) {
+            // Track is ready - add it directly
+            const sender = connection.addTrack(track, stream);
+            peerInfo.audioSender = sender;
+            console.log(`[PeerManager] Added track to peer ${peerId}`);
         } else {
-            // No track yet - add transceiver to receive audio anyway
-            connection.addTransceiver('audio', { direction: 'recvonly' });
+            // No track yet - add transceiver with sendrecv so we can add track later
+            // Using sendrecv (not recvonly) allows us to replace with actual track
+            const transceiver = connection.addTransceiver('audio', { direction: 'sendrecv' });
+            peerInfo.audioSender = transceiver.sender;
+            console.log(`[PeerManager] Added sendrecv transceiver for peer ${peerId}`);
         }
 
         // If we're the initiator, create offer

@@ -340,21 +340,26 @@ export function VoiceProvider({
         const pm = peerManagerRef.current;
         if (!pm || status !== 'connected') return;
 
-        // Add new peers
+        // Get peers we already have from the manager itself
+        const existingPeerIds = Array.from(pm.getAllPeers().keys());
+
+        // Add new peers (only those we don't already have)
         for (const peerId of peerIds) {
-            if (peerId !== userId && !connectedPeers.includes(peerId)) {
+            if (peerId !== userId && !existingPeerIds.includes(peerId)) {
                 const isInitiator = userId < peerId;
                 pm.createPeer(peerId, isInitiator);
             }
         }
 
-        // Remove peers that left
-        for (const peerId of connectedPeers) {
+        // Remove peers that left (only those no longer in room)
+        for (const peerId of existingPeerIds) {
             if (!peerIds.includes(peerId)) {
                 pm.removePeer(peerId);
             }
         }
-    }, [peerIds, userId, status, connectedPeers]);
+        // Note: We intentionally don't include connectedPeers to avoid loops
+        // The peerManager internally tracks which peers exist
+    }, [peerIds, userId, status]);
 
     // ---------------------------------------------------------------------------
     // Context Value
