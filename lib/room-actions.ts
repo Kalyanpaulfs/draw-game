@@ -30,6 +30,7 @@ export async function createRoom(hostId: string, hostName: string, config: GameC
             [hostId]: initialPlayer,
         },
         playerOrder: [],
+        usedWords: [],
         createdAt: Timestamp.now(),
     };
 
@@ -294,7 +295,7 @@ export async function selectDifficulty(roomId: string, difficulty: Difficulty) {
         transaction.update(roomRef, {
             "turn.phase": "choosing_word",
             "turn.difficulty": difficulty,
-            "turn.candidateWords": getRandomWords(3, difficulty),
+            "turn.candidateWords": getRandomWords(3, difficulty, room.usedWords || []),
             "turn.deadline": deadline,
         });
     });
@@ -325,6 +326,7 @@ export async function selectWord(roomId: string, word: string) {
             "turn.correctGuessers": [],
             "turn.scores": {},
             "turn.hintIndices": Array.from({ length: word.length }, (_, i) => i).sort(() => Math.random() - 0.5),
+            usedWords: [...(room.usedWords || []), word],
         });
     });
 }
@@ -486,6 +488,7 @@ export async function resetGame(roomId: string) {
             currentRound: 1,
             turn: null,
             playerOrder: [], // Will be re-shuffled on start
+            usedWords: [],
             createdAt: Timestamp.now(), // Reset time to sort/filter if needed
         };
 

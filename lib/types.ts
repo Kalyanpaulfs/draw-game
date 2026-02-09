@@ -41,5 +41,6 @@ export type Room = {
     turn: TurnState | null;
     players: Record<string, Player>;
     playerOrder: string[];
+    usedWords: string[];
     createdAt: Timestamp;
 };
