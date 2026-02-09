@@ -57,13 +57,12 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
             }
 
             // 1. Audio Constraints for Voice Quality (Optimized)
+            // REMOVED sampleRate and channelCount to prevent OverconstrainedError on some mobile devices
             const constraints = {
                 audio: {
                     echoCancellation: true,
                     noiseSuppression: true,
-                    autoGainControl: true,
-                    channelCount: 1,
-                    sampleRate: 48000
+                    autoGainControl: true
                 },
                 video: false
             };
@@ -346,11 +345,10 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
                         { urls: 'stun:global.stun.twilio.com:3478' }
                     ]
                 },
-                // SDP Transform to limit Bitrate (Bandwidth Optimization)
-                sdpTransform: (sdp: string) => {
-                    // Limit OPUS bitrate to 32kbps (good quality, low latency)
-                    return sdp.replace("a=fmtp:111 minptime=10;useinbandfec=1", "a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=32000");
-                }
+                // SDP Transform DISABLED for stability check
+                // sdpTransform: (sdp: string) => {
+                //    return sdp.replace("a=fmtp:111 minptime=10;useinbandfec=1", "a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=32000");
+                // }
             });
 
             peer.on("signal", (sig: any) => {
