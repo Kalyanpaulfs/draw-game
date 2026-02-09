@@ -162,13 +162,31 @@ export async function nextTurn(roomId: string) {
                 }
             }
 
+            // NEW: Transition to Revealing Phase if currently Drawing
+            if (room.turn.phase === "drawing") {
+                const revealDeadline = Timestamp.fromMillis(Date.now() + 3000); // 3s reveal
+                transaction.update(roomRef, {
+                    "turn.phase": "revealing",
+                    "turn.deadline": revealDeadline
+                });
+                return;
+            }
+
+            // If we are in 'revealing' phase (or others), we proceed to next player
+            // Prevent skipping revealing phase if it's still active
+            if (room.turn.phase === "revealing") {
+                const timeLeft = room.turn.deadline.toMillis() - Date.now();
+                // If there's still time left (allow 1s buffer for network latency/processing), don't skip
+                if (timeLeft > 500) {
+                    return;
+                }
+            }
+
             const { playerOrder, turn, players } = room;
             const currentIndex = playerOrder.indexOf(turn.drawerId);
             let nextIndex = (currentIndex + 1) % playerOrder.length;
 
             // Skip disconnected players check (simple version)
-            // In a real app we'd check lastSeen or isOnline, but for now we rely on the flag
-            // We limit loops to avoid infinite loop
             let attempts = 0;
             while (!players[playerOrder[nextIndex]].isOnline && attempts < playerOrder.length) {
                 nextIndex = (nextIndex + 1) % playerOrder.length;
@@ -178,7 +196,6 @@ export async function nextTurn(roomId: string) {
             const nextDrawerId = playerOrder[nextIndex];
 
             // Check if new round
-            // If we wrapped around to index 0, increment round
             let nextRound = room.currentRound;
             if (nextIndex === 0) {
                 nextRound++;
@@ -337,14 +354,16 @@ export async function submitGuess(roomId: string, userId: string, userName: stri
             // Check for early round end
             const otherPlayers = Object.values(room.players).filter(p => p.id !== room.turn?.drawerId && p.isOnline);
             if (newCorrectGuessers.length >= otherPlayers.length) {
+                // Force immediate expiration so Host triggers transition.
+                // We do NOT set 'revealing' here to avoid clock skew race conditions.
                 // @ts-expect-error: Inferred type mismatch
-                updates["turn.deadline"] = Timestamp.fromMillis(Date.now() + 3000);
+                updates["turn.deadline"] = Timestamp.fromMillis(0);
 
                 // Add immediate system message about round ending
                 await addDoc(messagesRef, {
                     userId: "SYSTEM",
                     userName: "SYSTEM",
-                    text: "All players guessed! Round ending in 3s...",
+                    text: "All players guessed! Round ending...",
                     isSystem: true,
                     timestamp: Timestamp.now()
                 });

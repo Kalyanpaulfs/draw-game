@@ -8,6 +8,7 @@ import { useChat } from "@/hooks/useChat";
 import { submitGuess } from "@/lib/room-actions";
 import { TurnTimer } from "./TurnTimer";
 import { WordSelector } from "./WordSelector";
+import { RoundResultOverlay } from "./RoundResultOverlay";
 import { cn } from "@/lib/game-utils";
 import { useState, useRef, useEffect } from "react";
 
@@ -58,7 +59,8 @@ export default function GameView({ room }: { room: Room }) {
     const totalDuration = room.turn?.phase === "drawing" ? 60 : 15;
 
     return (
-        <div className="w-full h-full flex flex-col bg-slate-950 overflow-hidden font-sans select-none text-slate-200">
+        <div className="w-full h-full flex flex-col bg-slate-950 overflow-hidden font-sans select-none text-slate-200 relative">
+            <RoundResultOverlay room={room} />
             <WordSelector room={room} />
 
             {/* Premium Mobile Header */}
