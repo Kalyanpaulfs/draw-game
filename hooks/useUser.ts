@@ -21,7 +21,7 @@ export function useUser() {
 
         const storedName = localStorage.getItem(USER_NAME_KEY);
         if (storedName) {
-            // eslint-disable-next-line
+             
             setUserName(storedName);
         }
     }, []);

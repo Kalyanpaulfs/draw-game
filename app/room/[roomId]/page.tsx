@@ -27,7 +27,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
     const [showLeaveModal, setShowLeaveModal] = useState(false);
 
     useEffect(() => {
-        // eslint-disable-next-line
+         
         if (userName) setJoinName(userName);
     }, [userName]);
 

@@ -293,12 +293,31 @@ export default function GameView({ room }: { room: Room }) {
                 <div className="w-7/12 bg-slate-900 rounded-t-lg border border-white/10 flex flex-col overflow-hidden">
                     <div className="flex-1 overflow-y-auto p-2 space-y-1 bg-slate-900/50 text-xs">
                         {messages.map((msg) => (
-                            <div key={msg.id} className={cn(
-                                "leading-tight break-words",
-                                msg.isSystem ? (msg.text.includes("guessed") ? "text-emerald-400 font-bold bg-emerald-500/10 p-1 rounded" : "text-indigo-400 font-bold text-center my-1") : "text-slate-300"
-                            )}>
-                                {!msg.isSystem && <span className="font-bold text-white">{msg.userName}: </span>}
-                                {msg.text}
+                            <div key={msg.id}>
+                                {msg.text.startsWith("Starting Round") ? (
+                                    <div className="flex items-center gap-2 my-4 opacity-80">
+                                        <div className="h-px flex-1 bg-indigo-500/50" />
+                                        <div className="text-[10px] uppercase tracking-widest text-indigo-300 font-bold px-2 py-0.5 bg-indigo-500/10 rounded border border-indigo-500/20 text-center">
+                                            {msg.text}
+                                        </div>
+                                        <div className="h-px flex-1 bg-indigo-500/50" />
+                                    </div>
+                                ) : (
+                                    <div className={cn(
+                                        "leading-tight break-words",
+                                        msg.isSystem ? (msg.text.includes("guessed") ? "text-emerald-400 font-bold bg-emerald-500/10 p-1 rounded" : "text-indigo-400 font-bold text-center my-1") : "text-slate-300"
+                                    )}>
+                                        {!msg.isSystem && <span className="font-bold text-white">{msg.userName}: </span>}
+                                        {msg.text}
+                                    </div>
+                                )}
+                                {msg.text.includes("Round ending") && (
+                                    <div className="flex items-center gap-2 my-2 opacity-30">
+                                        <div className="h-px flex-1 bg-white" />
+                                        <div className="text-[10px] uppercase tracking-widest text-white">Next Round</div>
+                                        <div className="h-px flex-1 bg-white" />
+                                    </div>
+                                )}
                             </div>
                         ))}
                         <div ref={chatEndRef} />
@@ -318,6 +337,6 @@ export default function GameView({ room }: { room: Room }) {
                 </div>
 
             </div>
-        </div>
+        </div >
     );
 }

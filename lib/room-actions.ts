@@ -1,4 +1,4 @@
-import { doc, setDoc, getDoc, updateDoc, Timestamp, runTransaction, collection, getDocs, writeBatch, addDoc, deleteField } from "firebase/firestore";
+import { doc, setDoc, getDoc, updateDoc, Timestamp, runTransaction, collection, getDocs, writeBatch, addDoc, deleteField, DocumentData } from "firebase/firestore";
 
 import { db } from "./firebase";
 import { Room, GameConfig, Player, Difficulty } from "./types";
@@ -140,10 +140,26 @@ export async function startGame(roomId: string) {
             correctGuessers: [],
         },
     });
+
+    // Send "Starting Round 1" message
+    const messagesRef = collection(db, "rooms", roomId, "messages");
+    const firstDrawerName = room.players[firstDrawerId]?.name || "Unknown";
+    const messageId = `round_1_${firstDrawerId}`;
+
+    await setDoc(doc(messagesRef, messageId), {
+        userId: "SYSTEM",
+        userName: "SYSTEM",
+        text: `Starting Round 1: ${firstDrawerName} is drawing!`,
+        isSystem: true,
+        timestamp: Timestamp.now()
+    });
 }
 
 export async function nextTurn(roomId: string) {
     const roomRef = doc(db, "rooms", roomId);
+
+    let messageToSend: DocumentData | null = null;
+    let msgMeta = { round: 0, drawerId: "" };
 
     try {
         await runTransaction(db, async (transaction) => {
@@ -219,7 +235,27 @@ export async function nextTurn(roomId: string) {
                     correctGuessers: [],
                 }
             });
+
+            // Set message metadata for deterministic ID
+            const drawerName = players[nextDrawerId]?.name || "Unknown";
+            msgMeta = { round: nextRound, drawerId: nextDrawerId };
+
+            messageToSend = {
+                userId: "SYSTEM",
+                userName: "SYSTEM",
+                text: `Starting Round ${nextRound}: ${drawerName} is drawing!`,
+                isSystem: true,
+                timestamp: Timestamp.now()
+            };
         });
+
+        // Send message if set
+        // Send message with deterministic ID
+        if (messageToSend && msgMeta.round > 0) {
+            const messagesRef = collection(db, "rooms", roomId, "messages");
+            const msgId = `round_${msgMeta.round}_${msgMeta.drawerId}`;
+            await setDoc(doc(messagesRef, msgId), messageToSend);
+        }
     } catch (e: any) {
         // If precondition failed, it means the document changed under us (likely another client triggered nextTurn).
         // This is expected in a distributed system with optimistic UI. We can safely ignore it if the outcome
@@ -294,134 +330,140 @@ export async function submitGuess(roomId: string, userId: string, userName: stri
     const roomRef = doc(db, "rooms", roomId);
     const messagesRef = collection(db, "rooms", roomId, "messages");
 
-    // Transaction to verify and update
-    await runTransaction(db, async (transaction) => {
-        const roomSnap = await transaction.get(roomRef);
-        if (!roomSnap.exists()) return;
-        const room = roomSnap.data() as Room;
+    let messagesToSend: DocumentData[] = [];
 
-        // Validate turn state
-        if (!room.turn || room.turn.phase !== "drawing") {
-            // Just a chat message
-            await addDoc(messagesRef, {
-                userId,
-                userName,
-                text,
-                isSystem: false,
-                timestamp: Timestamp.now()
-            });
-            return;
-        }
+    try {
+        await runTransaction(db, async (transaction) => {
+            const roomSnap = await transaction.get(roomRef);
+            if (!roomSnap.exists()) return;
+            const room = roomSnap.data() as Room;
 
-        const secret = room.turn.secretWord.toLowerCase();
-        const guess = text.trim().toLowerCase();
+            messagesToSend = []; // Reset on retry
 
-        if (secret === guess) {
-            // Correct Guess!
-            if (room.turn.correctGuessers?.includes(userId)) return;
-
-            // Scoring Logic
-
-            // 1. Guesser Score: Ratio-based (Works for ANY round duration)
-            // Formula: Base(50) + (TimeRatio * 50)
-            const now = Date.now();
-            const deadline = room.turn.deadline.toMillis();
-            const totalDuration = 60 * 1000;
-
-            const timeLeft = Math.max(0, deadline - now);
-            const timeRatio = Math.min(1, Math.max(0, timeLeft / totalDuration));
-
-            const points = Math.round(50 + (timeRatio * 50));
-
-            // 2. Drawer Score: Percentage of audience reached
-            const totalPlayers = Object.keys(room.players).length;
-            const potentialGuessers = Math.max(1, totalPlayers - 1); // Exclude drawer
-
-            const newCorrectGuessers = [...(room.turn.correctGuessers || []), userId];
-
-            // Drawer gets score based on NEW total percentage
-            const drawerIncrement = Math.round((1 / potentialGuessers) * 100);
-
-            const currentScore = room.players[userId]?.score || 0;
-            const drawerScore = room.players[room.turn.drawerId]?.score || 0;
-
-            const updates = {
-                [`players.${userId}.score`]: currentScore + points,
-                [`players.${room.turn.drawerId}.score`]: drawerScore + drawerIncrement,
-                "turn.correctGuessers": newCorrectGuessers
-            };
-
-            // Check for early round end
-            const otherPlayers = Object.values(room.players).filter(p => p.id !== room.turn?.drawerId && p.isOnline);
-            if (newCorrectGuessers.length >= otherPlayers.length) {
-                // Force immediate expiration so Host triggers transition.
-                // We do NOT set 'revealing' here to avoid clock skew race conditions.
-                // @ts-expect-error: Inferred type mismatch
-                updates["turn.deadline"] = Timestamp.fromMillis(0);
-
-                // Add immediate system message about round ending
-                await addDoc(messagesRef, {
-                    userId: "SYSTEM",
-                    userName: "SYSTEM",
-                    text: "All players guessed! Round ending...",
-                    isSystem: true,
-                    timestamp: Timestamp.now()
-                });
-            }
-
-            transaction.update(roomRef, updates);
-
-            await addDoc(messagesRef, {
-                userId,
-                userName,
-                text: `${userName} guessed the word!`,
-                isSystem: true,
-                timestamp: Timestamp.now()
-            });
-
-        } else {
-            // Wrong guess - CHECK FOR CLOSE GUESS
-            const distance = getLevenshteinDistance(secret, guess);
-            const len = secret.length;
-            let threshold = 0;
-
-            // User Rule: 5->1, 5-7->2, >7->3
-            if (len < 5) threshold = 1;
-            else if (len <= 7) threshold = 2;
-            else threshold = 3;
-
-            if (distance <= threshold && distance > 0) {
-                // Send PRIVATE system message to guesser
-                await addDoc(messagesRef, {
-                    userId: "SYSTEM",
-                    userName: "SYSTEM",
-                    text: `You are very close!`,
-                    isSystem: true,
-                    timestamp: Timestamp.now(),
-                    visibleTo: [userId]
-                });
-
-                // ALSO make the user's guess PRIVATE
-                await addDoc(messagesRef, {
+            // Validate turn state
+            if (!room.turn || room.turn.phase !== "drawing") {
+                // Just a chat message
+                messagesToSend.push({
                     userId,
                     userName,
                     text,
                     isSystem: false,
-                    timestamp: Timestamp.now(),
-                    visibleTo: [userId]
+                    timestamp: Timestamp.now()
                 });
+                return;
+            }
+
+            const secret = room.turn.secretWord.toLowerCase();
+            const guess = text.trim().toLowerCase();
+
+
+
+            if (secret === guess) {
+                // Correct Guess!
+                if (room.turn.correctGuessers?.includes(userId)) return;
+
+                // Scoring Logic
+                const now = Date.now();
+                const deadline = room.turn.deadline.toMillis();
+                const totalDuration = 60 * 1000;
+
+                const timeLeft = Math.max(0, deadline - now);
+                const timeRatio = Math.min(1, Math.max(0, timeLeft / totalDuration));
+
+                const points = Math.round(50 + (timeRatio * 50));
+
+                // Drawer Score
+                const totalPlayers = Object.keys(room.players).length;
+                const potentialGuessers = Math.max(1, totalPlayers - 1);
+
+                const newCorrectGuessers = [...(room.turn.correctGuessers || []), userId];
+
+                const drawerIncrement = Math.round((1 / potentialGuessers) * 100);
+
+                const currentScore = room.players[userId]?.score || 0;
+                const drawerScore = room.players[room.turn.drawerId]?.score || 0;
+
+                const updates: Record<string, any> = {
+                    [`players.${userId}.score`]: currentScore + points,
+                    [`players.${room.turn.drawerId}.score`]: drawerScore + drawerIncrement,
+                    "turn.correctGuessers": newCorrectGuessers
+                };
+
+                // Check for early round end
+                const otherPlayers = Object.values(room.players).filter(p => p.id !== room.turn?.drawerId && p.isOnline);
+
+                messagesToSend.push({
+                    userId,
+                    userName,
+                    text: `${userName} guessed the word!`,
+                    isSystem: true,
+                    timestamp: Timestamp.now()
+                });
+
+                if (newCorrectGuessers.length >= otherPlayers.length) {
+                    // Force immediate expiration
+                    updates["turn.deadline"] = Timestamp.fromMillis(0);
+
+                    messagesToSend.push({
+                        userId: "SYSTEM",
+                        userName: "SYSTEM",
+                        text: "All players guessed! Round ending...",
+                        isSystem: true,
+                        timestamp: Timestamp.now()
+                    });
+                }
+
+                transaction.update(roomRef, updates);
+
             } else {
-                // Normal public chat message for the wrong guess
-                await addDoc(messagesRef, {
-                    userId,
-                    userName,
-                    text,
-                    isSystem: false,
-                    timestamp: Timestamp.now()
-                });
+                // Wrong guess
+                const distance = getLevenshteinDistance(secret, guess);
+                const len = secret.length;
+                let threshold = 0;
+
+                if (len < 5) threshold = 1;
+                else if (len <= 7) threshold = 2;
+                else threshold = 3;
+
+                if (distance <= threshold && distance > 0) {
+                    messagesToSend.push({
+                        userId: "SYSTEM",
+                        userName: "SYSTEM",
+                        text: `You are very close!`,
+                        isSystem: true,
+                        timestamp: Timestamp.now(),
+                        visibleTo: [userId]
+                    });
+
+                    messagesToSend.push({
+                        userId,
+                        userName,
+                        text,
+                        isSystem: false,
+                        timestamp: Timestamp.now(),
+                        visibleTo: [userId]
+                    });
+                } else {
+                    messagesToSend.push({
+                        userId,
+                        userName,
+                        text,
+                        isSystem: false,
+                        timestamp: Timestamp.now()
+                    });
+                }
             }
+        }); // End runTransaction
+
+        // Execution successful, send messages
+        if (messagesToSend.length > 0) {
+            await Promise.all(messagesToSend.map(msg => addDoc(messagesRef, msg)));
         }
-    });
+
+    } catch (e) {
+        console.error("submitGuess transaction failed:", e);
+        throw e; // Re-throw to let UI handle it
+    }
 }
 
 export async function resetGame(roomId: string) {
@@ -432,7 +474,7 @@ export async function resetGame(roomId: string) {
         if (!roomSnap.exists()) throw "Room not found";
         const room = roomSnap.data() as Room;
 
-        const updates = {
+        const updates: Record<string, any> = {
             status: "waiting",
             currentRound: 1,
             turn: null,
@@ -442,14 +484,21 @@ export async function resetGame(roomId: string) {
 
         // Reset scores and ready status
         Object.keys(room.players).forEach(pid => {
-            // @ts-expect-error: Inferred type mismatch
             updates[`players.${pid}.score`] = 0;
-            // @ts-expect-error: Inferred type mismatch
             updates[`players.${pid}.isReady`] = false;
         });
 
         transaction.update(roomRef, updates);
     });
+
+    // Clear chat messages (non-blocking)
+    const messagesRef = collection(db, "rooms", roomId, "messages");
+    const messagesSnap = await getDocs(messagesRef);
+    if (!messagesSnap.empty) {
+        const batch = writeBatch(db);
+        messagesSnap.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit().catch(console.error);
+    }
 
     // Cleanup all strokes
     const strokesRef = collection(db, "rooms", roomId, "draw_strokes");
