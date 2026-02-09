@@ -94,9 +94,20 @@ export default function GameView({ room }: { room: Room }) {
                                 const word = room.turn?.secretWord || "";
                                 const hints = room.turn?.hintIndices || [];
                                 const len = word.length;
-                                let hintsToReveal = 0;
 
+                                // Only calculate hints during drawing phase
+                                // This prevents hint flash during phase transitions
+                                if (room.turn?.phase !== "drawing") {
+                                    return word.split("").map(() => "_").join("");
+                                }
+
+                                let hintsToReveal = 0;
                                 const elapsedPercent = (totalDuration - timeLeft) / totalDuration;
+
+                                // Guard against invalid elapsed percent (e.g., at phase start)
+                                if (elapsedPercent < 0.1 || elapsedPercent > 1) {
+                                    return word.split("").map(() => "_").join("");
+                                }
 
                                 if (len <= 4) {
                                     // 1 hint at 50%
