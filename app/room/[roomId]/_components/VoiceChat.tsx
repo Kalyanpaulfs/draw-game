@@ -29,7 +29,10 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
     const [peers, setPeers] = useState<Record<string, PeerData>>({});
     const peersRef = useRef<Record<string, PeerData>>({});
     const streamRef = useRef<MediaStream | null>(null);
-    const [isMuted, setIsMuted] = useState(false);
+
+    // Mute state: Logical preference vs Physical track state
+    const [isMicMuted, setIsMicMuted] = useState<boolean>(false);
+    const isMicMutedRef = useRef<boolean>(false);
 
     // Audio Context & Analyser refs
     const audioContextRef = useRef<AudioContext | null>(null);
@@ -38,146 +41,270 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
     const rafRef = useRef<number | null>(null); // Animation frame reference
     const [volume, setVolume] = useState(0);
 
-    // Audio Initialization & Volume Meter
-    // Audio Initialization & Volume Meter
-    const initAudio = useCallback(async () => {
+    // Sync ref with state for event listeners
+    useEffect(() => {
+        isMicMutedRef.current = isMicMuted;
+    }, [isMicMuted]);
+
+    // 1. Initialize Audio (First Run)
+    const initializeAudio = useCallback(async () => {
         try {
-            // Initialize AudioContext
+            console.log("Initializing Audio...");
             const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+
             if (AudioContext && !audioContextRef.current) {
                 audioContextRef.current = new AudioContext();
             }
 
-            const stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+            // Get initial stream
+            const newStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
 
-            setStream(stream);
-            streamRef.current = stream;
+            // Set up tracks
+            handleNewStream(newStream);
 
-            // Setup Analyser if context exists
-            if (audioContextRef.current) {
-                try {
-                    const ctx = audioContextRef.current;
-                    // Resume if suspended (important for mobile)
-                    if (ctx.state === 'suspended') await ctx.resume();
-
-                    const analyser = ctx.createAnalyser();
-                    analyser.fftSize = 256;
-                    analyserRef.current = analyser;
-
-                    const source = ctx.createMediaStreamSource(stream);
-                    source.connect(analyser);
-                    sourceRef.current = source;
-
-                    const bufferLength = analyser.frequencyBinCount;
-                    const dataArray = new Uint8Array(bufferLength);
-
-                    const updateVolume = () => {
-                        if (!analyserRef.current) return;
-                        analyserRef.current.getByteFrequencyData(dataArray);
-
-                        let sum = 0;
-                        // Focus on voice frequency range roughly (lower bins)
-                        for (let i = 0; i < bufferLength; i++) {
-                            sum += dataArray[i];
-                        }
-                        const average = sum / bufferLength;
-                        // Amplify for better visual feedback
-                        setVolume(Math.min(100, average * 2.5));
-
-                        rafRef.current = requestAnimationFrame(updateVolume);
-                    };
-                    updateVolume();
-                } catch (err) {
-                    console.error("Error setting up audio analyser:", err);
-                }
-            }
         } catch (err) {
-            console.error("Error accessing microphone:", err);
+            console.error("Error initializing audio:", err);
         }
     }, []);
 
+    // 2. Re-acquire Stream (Recovery)
+    const reacquireStream = useCallback(async () => {
+        try {
+            console.log("Re-acquiring audio stream due to interruption/backgrounding...");
+
+            // Cleanup old tracks
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(t => t.stop());
+            }
+
+            // Get new stream
+            const newStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+
+            // Handle critical track replacement for peers
+            handleNewStream(newStream);
+
+            // Update all existing peers with the new stream
+            replaceTrackOnPeers(streamRef.current, newStream);
+
+        } catch (err) {
+            console.error("Error re-acquiring stream:", err);
+        }
+    }, []);
+
+    // Helper: Handle new stream setup (local)
+    const handleNewStream = (newStream: MediaStream) => {
+        setStream(newStream);
+        streamRef.current = newStream;
+
+        // Apply mute preference immediately
+        const audioTrack = newStream.getAudioTracks()[0];
+        if (audioTrack) {
+            audioTrack.enabled = !isMicMutedRef.current;
+
+            // Add listeners for OS-level muting (Phone calls)
+            audioTrack.onmute = () => {
+                console.warn("Track muted by OS (Incoming call?)");
+                // We don't change React state here strictly, but we know the track is dead temporarily
+            };
+            audioTrack.onunmute = () => {
+                console.log("Track unmuted by OS. Verifying state...");
+                // Force sync 
+                audioTrack.enabled = !isMicMutedRef.current;
+            };
+            audioTrack.onended = () => {
+                console.warn("Track ended unexpectedly. Attempting recovery...");
+                reacquireStream();
+            };
+        }
+
+        // Setup Analyser
+        setupAnalyser(newStream);
+    };
+
+    // Helper: Setup AudioContext Analyser
+    const setupAnalyser = (currentStream: MediaStream) => {
+        if (!audioContextRef.current) return;
+
+        try {
+            const ctx = audioContextRef.current;
+            // Ensure running
+            if (ctx.state === 'suspended' || ctx.state === 'interrupted') {
+                ctx.resume().catch(e => console.warn("Auto-resume failed:", e));
+            }
+
+            // Cleanup old source
+            if (sourceRef.current) {
+                sourceRef.current.disconnect();
+            }
+
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 256;
+            analyserRef.current = analyser;
+
+            const source = ctx.createMediaStreamSource(currentStream);
+            source.connect(analyser);
+            sourceRef.current = source;
+
+            // Start visualization loop if not running
+            if (!rafRef.current) {
+                measureVolume();
+            }
+
+        } catch (err) {
+            console.error("Error setting up analyser:", err);
+        }
+    };
+
+    const measureVolume = () => {
+        if (!analyserRef.current) return;
+
+        const bufferLength = analyserRef.current.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        const update = () => {
+            if (!analyserRef.current) return;
+            analyserRef.current.getByteFrequencyData(dataArray);
+
+            let sum = 0;
+            for (let i = 0; i < bufferLength; i++) {
+                sum += dataArray[i];
+            }
+            const average = sum / bufferLength;
+            setVolume(Math.min(100, average * 2.5));
+
+            rafRef.current = requestAnimationFrame(update);
+        };
+        update();
+    };
+
+    // CRITICAL: Replace Track on Peers
+    const replaceTrackOnPeers = (oldStream: MediaStream | null, newStream: MediaStream) => {
+        const newTrack = newStream.getAudioTracks()[0];
+        const oldTrack = oldStream?.getAudioTracks()[0];
+
+        if (!newTrack) return;
+
+        console.log("Replacing tracks for", Object.keys(peersRef.current).length, "peers");
+
+        Object.values(peersRef.current).forEach(({ peer }) => {
+            if (!peer || peer.destroyed) return;
+
+            try {
+                // simple-peer / WebRTC `replaceTrack`
+                // signature: replaceTrack(oldTrack, newTrack, stream)
+                if (oldTrack) {
+                    peer.replaceTrack(oldTrack, newTrack, newStream);
+                } else {
+                    // Fallback if no old track, just add it (uncommon in this flow)
+                    peer.addTrack(newTrack, newStream);
+                }
+            } catch (e) {
+                console.error("Peer replaceTrack failed:", e);
+            }
+        });
+    };
+
+    // Mute Logic (Enforcer)
     useEffect(() => {
-        initAudio();
+        if (streamRef.current) {
+            const track = streamRef.current.getAudioTracks()[0];
+            if (track) {
+                // Always enforce user preference
+                track.enabled = !isMicMuted;
+            }
+        }
+    }, [isMicMuted, stream]); // Run when Stream changes OR Mute changes
+
+    const toggleMute = () => {
+        if (hasMoved.current) return;
+        setIsMicMuted(prev => !prev);
+    };
+
+    // Setup on mount
+    useEffect(() => {
+        initializeAudio();
 
         return () => {
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
-            if (sourceRef.current) {
-                sourceRef.current.disconnect();
-                // sourceRef.current = null; // Keep ref for cleanup if needed, but disconnect is key
-            }
-            if (streamRef.current) {
-                streamRef.current.getTracks().forEach(track => track.stop());
-            }
-            if (audioContextRef.current) {
-                audioContextRef.current.close().catch(console.error);
-                audioContextRef.current = null;
-            }
+            if (sourceRef.current) sourceRef.current.disconnect();
+            if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+            if (audioContextRef.current) audioContextRef.current.close();
         };
-    }, [initAudio]);
+    }, [initializeAudio]);
 
-    // Resume Audio on Visibility Change & Interaction
+
+    // LIFECYCLE: Visibility & Interruption Handling
     useEffect(() => {
-        const resumeAudio = async () => {
-            // 1. Resume AudioContext (Hardware access)
-            if (audioContextRef.current) {
-                try {
-                    if (audioContextRef.current.state === 'suspended') {
-                        await audioContextRef.current.resume();
-                    }
-                } catch (e) {
-                    console.error("Error resuming AudioContext:", e);
-                }
-            }
+        const handleVisibilityChange = async () => {
+            console.log("Visibility Change:", document.visibilityState);
 
-            // 2. Mobile Safari/Chrome "Background Kill" Fix
-            // If the microphone track was stopped by the OS, we must signal a re-acquisition.
-            if (streamRef.current) {
-                const audioTrack = streamRef.current.getAudioTracks()[0];
-                // If track is ended or muted by OS (but not by user), we might need to re-acquire.
-                // Note: 'muted' can happen on incoming calls. 'ended' happens if permissions revoked or strict OS kill.
-                if (audioTrack) {
-                    if (audioTrack.readyState === 'ended') {
-                        console.warn("Audio track ended by OS. Re-acquiring stream...");
-                        if (audioTrack.readyState === 'ended') {
-                            console.warn("Audio track ended by OS. Re-acquiring stream...");
-                            await initAudio();
-                        } else if (audioTrack.muted) {
-                            console.log("Audio track is muted by OS/Browser. Attempting to unmute...");
-                            audioTrack.enabled = true; // Try to force enable
-                        }
+            if (document.visibilityState === 'visible') {
+                // 1. Check AudioContext
+                if (audioContextRef.current) {
+                    const state = audioContextRef.current.state;
+                    console.log("AudioContext State on visible:", state);
 
-                        if (!isMuted && !audioTrack.enabled) {
-                            audioTrack.enabled = true;
+                    if (state === 'suspended' || state === 'interrupted') {
+                        try {
+                            await audioContextRef.current.resume();
+                        } catch (e) {
+                            console.warn("Resume failed on visibility change, waiting for interaction", e);
                         }
                     }
                 }
 
-                // 3. Resume Peer Audio Elements
-                const audioElements = document.querySelectorAll('audio');
-                audioElements.forEach(audio => {
+                // 2. Check Stream Healthy
+                if (streamRef.current) {
+                    const track = streamRef.current.getAudioTracks()[0];
+                    if (!track) {
+                        await reacquireStream();
+                    } else if (track.readyState === 'ended') {
+                        console.warn("Track dead on return. Re-acquiring.");
+                        await reacquireStream();
+                    } else if (track.muted) {
+                        console.warn("Track still muted by OS on return.");
+                        // Optional: Timeout to force re-acquire if it stays muted?
+                        setTimeout(() => {
+                            if (track.muted && document.visibilityState === 'visible') {
+                                console.warn("Track stuck muted. Forcing re-acquisition.");
+                                reacquireStream();
+                            }
+                        }, 2500);
+                    }
+                }
+
+                // 3. Resume External Audio Elements
+                document.querySelectorAll('audio').forEach(audio => {
                     if (audio.paused && audio.srcObject) {
-                        audio.play().catch(e => console.log("Failed to resume audio element:", e));
+                        audio.play().catch(e => console.log("Auto-resume audio element failed:", e));
                     }
                 });
-            };
+            }
+        };
 
-            const handleVisibilityChange = () => {
-                if (document.visibilityState === 'visible') {
-                    resumeAudio();
-                }
-            };
+        const handleInteraction = async () => {
+            // Always try to resume context on touch/click
+            if (audioContextRef.current && (audioContextRef.current.state === 'suspended' || audioContextRef.current.state === 'interrupted')) {
+                console.log("Restoring AudioContext on user interaction");
+                try {
+                    await audioContextRef.current.resume();
+                } catch (e) { console.error(e); }
+            }
+        };
 
-            // Add listeners to resume audio context (needed for mobile browsers)
-            document.addEventListener('visibilitychange', handleVisibilityChange);
-            window.addEventListener('touchstart', resumeAudio);
-            window.addEventListener('click', resumeAudio);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('touchstart', handleInteraction);
+        window.addEventListener('click', handleInteraction);
 
-            return () => {
-                document.removeEventListener('visibilitychange', handleVisibilityChange);
-                window.removeEventListener('touchstart', resumeAudio);
-                window.removeEventListener('click', resumeAudio);
-            };
-        }, [isMuted, initAudio]);
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('touchstart', handleInteraction);
+            window.removeEventListener('click', handleInteraction);
+        };
+    }, [reacquireStream]);
+
+
+    // -- EXISTING PEER & DRAG LOGIC BELOW (Unchanged mostly, just ensure refs usage) --
 
     // Helper to create peer (memoized)
     const createPeer = useCallback((id: string, initiator: boolean, incomingSignal?: any) => {
@@ -230,11 +357,11 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
         } catch (err: any) {
             console.error("Create Peer Error:", err);
         }
-    }, [roomId, userId, stream]);
+    }, [roomId, userId]); // Removed stream from dependency to avoid recreation loops
 
     // WebRTC: Signaling & Peers
     useEffect(() => {
-        if (!stream || !userId || !roomId) return;
+        if (!userId || !roomId) return; // Wait for setup
 
         // Listen for signals
         const q = query(
@@ -249,8 +376,6 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
                     const senderId = data.senderId;
                     const signal = JSON.parse(data.signal);
 
-                    // FIX: If we receive a new OFFER from an existing peer, it means they reloaded.
-                    // We must destroy the old connection and accept the new one.
                     if (peersRef.current[senderId]) {
                         if (signal.type === "offer") {
                             console.log(`Received new offer from existing peer ${senderId}. Resetting connection.`);
@@ -263,14 +388,11 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
                                 delete next[senderId];
                                 return next;
                             });
-                            // Create new peer as non-initiator to accept the offer
                             createPeer(senderId, false, signal);
                         } else {
-                            // Normal signaling for existing connection (answer, candidate)
                             peersRef.current[senderId].peer.signal(signal);
                         }
                     } else {
-                        // New connection
                         createPeer(senderId, false, signal);
                     }
                     deleteDoc(change.doc.ref);
@@ -288,7 +410,7 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
         });
 
         return () => unsubscribe();
-    }, [stream, userId, roomId, players, createPeer]);
+    }, [userId, roomId, players, createPeer]); // stream removed from deps to prevent re-negotiation storm
 
     // Draggable Logic
     const [position, setPosition] = useState({ x: 20, y: 100 });
@@ -311,7 +433,6 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
                 const newX = clientX - dragOffset.current.x;
                 const newY = clientY - dragOffset.current.y;
 
-                // Clamp to screen boundaries (assuming ~50px width/height for the bubble)
                 const clampedX = Math.max(0, Math.min(window.innerWidth - 60, newX));
                 const clampedY = Math.max(0, Math.min(window.innerHeight - 60, newY));
 
@@ -352,17 +473,6 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
         };
     };
 
-    const toggleMute = () => {
-        if (hasMoved.current) return;
-        if (stream) {
-            const track = stream.getAudioTracks()[0];
-            if (track) {
-                track.enabled = !track.enabled;
-                setIsMuted(!track.enabled);
-            }
-        }
-    };
-
     if (!stream) return (
         <div className="fixed top-24 left-4 z-50">
             <div className="w-12 h-12 rounded-full bg-slate-700 animate-pulse flex items-center justify-center shadow-lg">
@@ -396,13 +506,13 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
                     disabled={!stream}
                     className={`w-12 h-12 rounded-full flex items-center justify-center shadow-2xl border border-white/10 transition-all transform active:scale-95 ${!stream
                         ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50'
-                        : isMuted
+                        : isMicMuted
                             ? 'bg-red-500/80 text-white hover:bg-red-600'
                             : 'bg-slate-900/80 text-emerald-400 hover:bg-slate-800 backdrop-blur-md'
                         }`}
                 >
                     {/* Volume Meter Ring */}
-                    {!isMuted && stream && (
+                    {!isMicMuted && stream && (
                         <div
                             className="absolute inset-0 rounded-full border-2 border-emerald-500/50 pointer-events-none transition-all duration-75 ease-out"
                             style={{
@@ -411,7 +521,7 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
                             }}
                         />
                     )}
-                    {isMuted ? (
+                    {isMicMuted ? (
                         <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18" /></svg>
                     ) : (
                         <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
