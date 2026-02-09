@@ -96,18 +96,41 @@ export default function GameView({ room }: { room: Room }) {
                                 const len = word.length;
 
                                 // Only calculate hints during drawing phase
-                                // This prevents hint flash during phase transitions
                                 if (room.turn?.phase !== "drawing") {
                                     return word.split("").map(() => "_").join("");
                                 }
 
-                                let hintsToReveal = 0;
-                                const elapsedPercent = (totalDuration - timeLeft) / totalDuration;
-
-                                // Guard against invalid elapsed percent (e.g., at phase start)
-                                if (elapsedPercent < 0.1 || elapsedPercent > 1) {
+                                // Calculate elapsed from deadline directly (not from timeLeft which can be stale)
+                                const deadline = room.turn?.deadline;
+                                if (!deadline) {
                                     return word.split("").map(() => "_").join("");
                                 }
+
+                                const now = Date.now();
+                                const drawingDuration = 60 * 1000; // 60 seconds in ms
+                                // Handle Firestore Timestamp, Date, or number
+                                let endTime: number;
+                                if (typeof deadline === 'number') {
+                                    endTime = deadline;
+                                } else if (deadline instanceof Date) {
+                                    endTime = deadline.getTime();
+                                } else if (typeof (deadline as { toMillis?: () => number }).toMillis === 'function') {
+                                    endTime = (deadline as { toMillis: () => number }).toMillis();
+                                } else {
+                                    // Fallback: show no hints if type is unknown
+                                    return word.split("").map(() => "_").join("");
+                                }
+                                const startTime = endTime - drawingDuration;
+                                const elapsed = now - startTime;
+                                const elapsedPercent = elapsed / drawingDuration;
+
+                                // Guard: Don't show hints if elapsed is negative or < 10%
+                                // This prevents flash at phase start
+                                if (elapsedPercent < 0.1 || elapsedPercent > 1.0 || elapsed < 0) {
+                                    return word.split("").map(() => "_").join("");
+                                }
+
+                                let hintsToReveal = 0;
 
                                 if (len <= 4) {
                                     // 1 hint at 50%
