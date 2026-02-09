@@ -25,6 +25,9 @@ export function useGameLoop(room: Room | null, userId: string) {
 
             // Host handles turn switching when time expires
             if (diff <= 0 && room.hostId === userId) {
+                // Check if we already have a pending action or if the state implies we should wait
+                // We rely on the server to reject duplicates, but good to throttle here too.
+                // For now, simpler is better: rely on server idempotency we just added.
                 nextTurn(room.roomId).catch(console.error);
             }
         }, 1000);

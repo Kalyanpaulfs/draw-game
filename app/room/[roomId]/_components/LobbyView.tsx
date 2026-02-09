@@ -14,78 +14,23 @@ interface LobbyViewProps {
 
 export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
     const [isStarting, setIsStarting] = useState(false);
+    const [showLeaveModal, setShowLeaveModal] = useState(false);
     const router = useRouter();
     const isHost = room.hostId === userId;
     const playerCount = Object.keys(room.players).length;
     const player = room.players[userId]; // Current user's player object
 
     const handleLeave = async () => {
-        if (confirm("Are you sure you want to leave the room?")) {
-            await leaveRoom(roomId, userId);
-            router.push("/");
-        }
+        await leaveRoom(roomId, userId);
+        router.push("/");
     };
 
     const handleCopyRoomId = () => {
         navigator.clipboard.writeText(roomId);
-        // Could add a toast here ideally
     };
 
     return (
-        <div className="fixed inset-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-[#0a0f1c] to-black flex flex-col overflow-hidden text-slate-200 font-sans selection:bg-indigo-500/30 selection:text-indigo-200">
-
-            {/* Ambient Background Effects */}
-            <div className="absolute top-0 left-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-[100px] pointer-events-none animate-pulse" style={{ animationDuration: '4s' }}></div>
-            <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-[100px] pointer-events-none animate-pulse" style={{ animationDuration: '7s' }}></div>
-
-            {/* --- Header Bar (Fixed) --- */}
-            <header className="flex-none px-6 py-4 md:py-6 border-b border-white/5 bg-slate-900/60 backdrop-blur-2xl z-50 shadow-2xl shadow-black/20">
-                <div className="max-w-7xl mx-auto w-full flex items-center justify-between">
-
-                    {/* Left: Branding & Status */}
-                    <div className="flex items-center gap-6">
-                        <div className="relative group">
-                            <div className="absolute -inset-2 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-lg blur opacity-20 group-hover:opacity-40 transition duration-500"></div>
-                            <h1 className="relative text-2xl md:text-3xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white via-indigo-200 to-indigo-400 cursor-default">
-                                PIXXI<span className="text-indigo-500">POP</span>
-                            </h1>
-                        </div>
-
-                        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/5 backdrop-blur-sm">
-                            <span className={cn("w-1.5 h-1.5 rounded-full animate-pulse", playerCount >= 2 ? "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.5)]" : "bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.5)]")}></span>
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                                {playerCount < 2 ? "Waiting for players" : "Ready to start"}
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* Right: Room Code & Leave */}
-                    <div className="flex items-center gap-3 md:gap-4">
-                        <button
-                            onClick={handleCopyRoomId}
-                            className="group relative overflow-hidden bg-slate-800/50 hover:bg-slate-800 border border-white/10 hover:border-indigo-500/30 rounded-xl pl-4 pr-12 py-2 md:py-2.5 transition-all duration-300 active:scale-[0.98]"
-                            title="Click to copy room code"
-                        >
-                            <div className="flex flex-col items-start gap-0.5">
-                                <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500 group-hover:text-indigo-400 transition-colors">Room Code</span>
-                                <span className="font-mono text-lg font-bold text-white tracking-widest leading-none">{roomId}</span>
-                            </div>
-                            <div className="absolute right-0 top-0 bottom-0 w-10 flex items-center justify-center bg-white/5 border-l border-white/5 group-hover:bg-indigo-500/10 group-hover:border-indigo-500/20 transition-colors">
-                                <svg className="w-4 h-4 text-slate-400 group-hover:text-indigo-400 transform group-hover:scale-110 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                            </div>
-                        </button>
-
-                        <button
-                            onClick={handleLeave}
-                            className="w-11 h-11 md:w-auto md:h-auto md:px-4 md:py-2.5 bg-white/5 hover:bg-red-500/10 text-slate-400 hover:text-red-400 rounded-xl border border-white/5 hover:border-red-500/20 transition-all duration-300 flex items-center justify-center gap-2 group active:scale-95"
-                            title="Leave Room"
-                        >
-                            <svg className="w-5 h-5 transition-transform group-hover:-translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                            <span className="hidden md:inline font-bold text-xs uppercase tracking-wider">Leave</span>
-                        </button>
-                    </div>
-                </div>
-            </header>
+        <div className="w-full h-full flex flex-col overflow-hidden">
 
             {/* --- Main Content (Scrollable) --- */}
             <main className="flex-1 overflow-hidden relative w-full max-w-7xl mx-auto p-4 md:p-6 lg:p-8 flex flex-col md:flex-row gap-6">
@@ -232,6 +177,50 @@ export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
                 </div>
 
             </main>
+
+            {/* Leave Confirmation Modal */}
+            {showLeaveModal && (
+                <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+                    {/* Backdrop */}
+                    <div
+                        className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-fade-in"
+                        onClick={() => setShowLeaveModal(false)}
+                    ></div>
+
+                    {/* Modal */}
+                    <div className="relative bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-scale-in">
+                        <div className="text-center">
+                            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                                <span className="text-3xl">👋</span>
+                            </div>
+                            <h3 className="text-xl font-bold text-white mb-2">Leave Room?</h3>
+                            <p className="text-sm text-slate-400 mb-6">Are you sure you want to leave? You can rejoin later with the room code.</p>
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowLeaveModal(false)}
+                                    className="flex-1 py-3 rounded-xl font-bold text-sm bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 transition-all active:scale-95"
+                                >
+                                    Stay
+                                </button>
+                                <button
+                                    onClick={handleLeave}
+                                    className="flex-1 py-3 rounded-xl font-bold text-sm bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20 transition-all active:scale-95"
+                                >
+                                    Leave
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <style jsx global>{`
+                .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+                .animate-scale-in { animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+                @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+            `}</style>
         </div>
     );
 }

@@ -148,28 +148,77 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
 
             <VoiceChat roomId={roomId} userId={userId} players={room.players} />
 
-            {/* Glass Header */}
-            <header className="relative z-10 px-6 py-4 border-b border-white/5 bg-slate-900/50 backdrop-blur-xl flex justify-between items-center shadow-2xl">
-                <div className="flex items-center gap-4">
-                    <div className="flex flex-col">
-                        <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold">Room Code</span>
-                        <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-400 tracking-tight leading-none">
-                            {roomId}
-                        </h1>
+            {/* Glass Header - Only show when not playing (Lobby/GameOver) */}
+            {room.status !== "playing" && (
+                <header className="relative z-10 px-6 py-4 border-b border-white/5 bg-slate-900/60 backdrop-blur-2xl flex justify-between items-center shadow-2xl">
+                    {/* Left: Room Code */}
+                    <div className="flex items-center gap-6">
+                        <div className="group relative">
+                            <div className="absolute -inset-4 bg-indigo-500/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                            <div className="relative flex flex-col">
+                                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold mb-0.5">Room Code</span>
+                                <div className="flex items-baseline gap-2">
+                                    <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-white to-purple-300 tracking-tight leading-none filter drop-shadow-lg">
+                                        {roomId}
+                                    </h1>
+                                    <button
+                                        onClick={copyLink}
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 hover:text-indigo-400"
+                                        title="Copy Code"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="h-10 w-px bg-gradient-to-b from-transparent via-white/10 to-transparent mx-2 hidden sm:block"></div>
+
+                        {/* Center: Player Count Pill */}
+                        <div className="hidden sm:flex items-center gap-3 px-4 py-2 bg-slate-800/40 border border-white/5 rounded-full backdrop-blur-md shadow-inner">
+                            <div className="relative">
+                                <span className="absolute inset-0 rounded-full bg-emerald-500 animate-ping opacity-75"></span>
+                                <span className="relative block w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></span>
+                            </div>
+                            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                                <span className="text-white">{playerCount}</span>
+                                <span className="text-slate-600 mx-1">/</span>
+                                <span className="text-slate-500">{room.config.maxPlayers}</span>
+                                <span className="ml-2 text-slate-500">Players</span>
+                            </span>
+                        </div>
                     </div>
-                    <div className="h-8 w-px bg-white/5 mx-2"></div>
-                    <span className="px-3 py-1 bg-white/5 border border-white/5 rounded-full text-xs text-slate-400 font-medium font-mono flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                        {playerCount} / {room.config.maxPlayers} Players
-                    </span>
-                </div>
-                <button
-                    onClick={copyLink}
-                    className="group flex items-center gap-2 text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 px-4 py-2 rounded-lg transition-all duration-300"
-                >
-                    <span className="text-slate-400 group-hover:text-white transition-colors">🔗 Invite Friends</span>
-                </button>
-            </header>
+
+                    {/* Right: Actions */}
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={copyLink}
+                            className="group relative overflow-hidden bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg shadow-indigo-500/20 transition-all duration-300 transform active:scale-[0.98]"
+                        >
+                            <span className="relative z-10 flex items-center gap-2">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                                Invite
+                            </span>
+                            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                        </button>
+
+                        <button
+                            onClick={() => {
+                                // Simple leave confirm 
+                                if (confirm("Leave room?")) {
+                                    import("@/lib/room-actions").then(mod => {
+                                        mod.leaveRoom(roomId, userId).then(() => router.push("/"));
+                                    });
+                                }
+                            }}
+                            className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800/50 hover:bg-red-500/10 text-slate-400 hover:text-red-400 border border-white/5 hover:border-red-500/20 transition-all duration-300 group"
+                            title="Leave Room"
+                        >
+                            <svg className="w-5 h-5 transition-transform group-hover:-translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                        </button>
+                    </div>
+                </header>
+            )}
 
             {/* Main Content Area */}
             <main className={`relative z-10 flex-1 flex flex-col items-center justify-center w-full mx-auto ${room.status === "playing" ? "h-full p-0 max-w-none" : "p-4 md:p-6 max-w-7xl"}`}>
@@ -183,6 +232,6 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
                     <LobbyView room={room} userId={userId} roomId={roomId} />
                 )}
             </main>
-        </div>
+        </div >
     );
 }

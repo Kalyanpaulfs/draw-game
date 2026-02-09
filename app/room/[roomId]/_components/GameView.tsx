@@ -58,7 +58,7 @@ export default function GameView({ room }: { room: Room }) {
     const totalDuration = room.turn?.phase === "drawing" ? 60 : 15;
 
     return (
-        <div className="w-full h-[100dvh] flex flex-col bg-slate-950 overflow-hidden font-sans select-none text-slate-200">
+        <div className="w-full h-full flex flex-col bg-slate-950 overflow-hidden font-sans select-none text-slate-200">
             <WordSelector room={room} />
 
             {/* Premium Mobile Header */}
@@ -90,7 +90,31 @@ export default function GameView({ room }: { room: Room }) {
                                 if (room.turn?.phase === "choosing_difficulty") return "WAITING";
                                 if (room.turn?.phase === "choosing_word") return "CHOOSING";
                                 if (isDrawer) return room.turn?.secretWord || "...";
-                                return room.turn?.secretWord?.replace(/./g, "_") || "____";
+
+                                const word = room.turn?.secretWord || "";
+                                const hints = room.turn?.hintIndices || [];
+                                const len = word.length;
+                                let hintsToReveal = 0;
+
+                                const elapsedPercent = (totalDuration - timeLeft) / totalDuration;
+
+                                if (len <= 4) {
+                                    // 1 hint at 50%
+                                    if (elapsedPercent >= 0.5) hintsToReveal = 1;
+                                } else if (len <= 7) {
+                                    // 2 hints at 33% and 66%
+                                    if (elapsedPercent >= 0.66) hintsToReveal = 2;
+                                    else if (elapsedPercent >= 0.33) hintsToReveal = 1;
+                                } else {
+                                    // 3 hints at 25%, 50%, 75%
+                                    if (elapsedPercent >= 0.75) hintsToReveal = 3;
+                                    else if (elapsedPercent >= 0.50) hintsToReveal = 2;
+                                    else if (elapsedPercent >= 0.25) hintsToReveal = 1;
+                                }
+
+                                const indicesToShow = hints.slice(0, hintsToReveal);
+
+                                return word.split("").map((char, i) => indicesToShow.includes(i) ? char : "_").join("");
                             })()}
                         </span>
                         <div className="bg-indigo-500/20 text-[9px] font-bold px-1.5 py-0.5 rounded text-indigo-300 shrink-0">

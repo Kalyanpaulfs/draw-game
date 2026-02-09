@@ -27,6 +27,7 @@ export type TurnState = {
     candidateWords: string[];
     secretWord: string;
     correctGuessers: string[];
+    hintIndices?: number[];
     difficulty?: Difficulty;
 };
 

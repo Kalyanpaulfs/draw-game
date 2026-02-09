@@ -3,10 +3,13 @@
 import { Room, Difficulty } from "@/lib/types";
 import { selectWord, selectDifficulty } from "@/lib/room-actions";
 import { useUser } from "@/hooks/useUser";
+import { useGameLoop } from "@/hooks/useGameLoop";
 import { useState } from "react";
+import { cn } from "@/lib/game-utils";
 
 export function WordSelector({ room }: { room: Room }) {
     const { userId } = useUser();
+    const { timeLeft } = useGameLoop(room, userId);
     const [loading, setLoading] = useState(false);
 
     // Check phase
@@ -36,10 +39,22 @@ export function WordSelector({ room }: { room: Room }) {
         }
     };
 
+    const Timer = () => (
+        <div className="absolute top-4 right-4 flex items-center justify-center">
+            <div className={cn(
+                "w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg border-4 transition-all shadow-lg backdrop-blur-md",
+                timeLeft <= 5 ? "border-red-500 text-red-400 bg-red-900/20 animate-pulse" : "border-indigo-500 text-indigo-300 bg-indigo-900/20"
+            )}>
+                {timeLeft}
+            </div>
+        </div>
+    );
+
     if (phase === "choosing_difficulty") {
         return (
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-                <div className="bg-gray-800 p-8 rounded-xl shadow-2xl border border-gray-700 max-w-lg w-full text-center animate-in fade-in zoom-in duration-300">
+                <div className="bg-gray-800 p-8 rounded-xl shadow-2xl border border-gray-700 max-w-lg w-full text-center animate-in fade-in zoom-in duration-300 relative">
+                    <Timer />
                     <h2 className="text-3xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
                         Select Difficulty
                     </h2>
@@ -75,7 +90,8 @@ export function WordSelector({ room }: { room: Room }) {
 
     return (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-            <div className="bg-gray-800 p-8 rounded-xl shadow-2xl border border-gray-700 max-w-lg w-full text-center animate-in fade-in zoom-in duration-300">
+            <div className="bg-gray-800 p-8 rounded-xl shadow-2xl border border-gray-700 max-w-lg w-full text-center animate-in fade-in zoom-in duration-300 relative">
+                <Timer />
                 <h2 className="text-3xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500">
                     Choose a Word!
                 </h2>

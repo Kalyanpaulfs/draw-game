@@ -145,54 +145,74 @@ export async function startGame(roomId: string) {
 export async function nextTurn(roomId: string) {
     const roomRef = doc(db, "rooms", roomId);
 
-    await runTransaction(db, async (transaction) => {
-        const roomSnap = await transaction.get(roomRef);
-        if (!roomSnap.exists()) throw "Room not found";
+    try {
+        await runTransaction(db, async (transaction) => {
+            const roomSnap = await transaction.get(roomRef);
+            if (!roomSnap.exists()) throw "Room not found";
 
-        const room = roomSnap.data() as Room;
-        if (!room.turn) throw "Game not started";
+            const room = roomSnap.data() as Room;
 
-        const { playerOrder, turn, players } = room;
-        const currentIndex = playerOrder.indexOf(turn.drawerId);
-        let nextIndex = (currentIndex + 1) % playerOrder.length;
+            if (!room.turn) throw "Game not started";
 
-        // Skip disconnected players check (simple version)
-        // In a real app we'd check lastSeen or isOnline, but for now we rely on the flag
-        // We limit loops to avoid infinite loop
-        let attempts = 0;
-        while (!players[playerOrder[nextIndex]].isOnline && attempts < playerOrder.length) {
-            nextIndex = (nextIndex + 1) % playerOrder.length;
-            attempts++;
-        }
+            // Prevent double-skip: If we JUST switched to choosing_difficulty and have plenty of time, ignore
+            if (room.turn.phase === "choosing_difficulty") {
+                const timeLeft = room.turn.deadline.toMillis() - Date.now();
+                if (timeLeft > 10000) { // If >10s left, we probably just switched.
+                    return; // Already handled
+                }
+            }
 
-        const nextDrawerId = playerOrder[nextIndex];
+            const { playerOrder, turn, players } = room;
+            const currentIndex = playerOrder.indexOf(turn.drawerId);
+            let nextIndex = (currentIndex + 1) % playerOrder.length;
 
-        // Check if new round
-        // If we wrapped around to index 0, increment round
-        let nextRound = room.currentRound;
-        if (nextIndex === 0) {
-            nextRound++;
-        }
+            // Skip disconnected players check (simple version)
+            // In a real app we'd check lastSeen or isOnline, but for now we rely on the flag
+            // We limit loops to avoid infinite loop
+            let attempts = 0;
+            while (!players[playerOrder[nextIndex]].isOnline && attempts < playerOrder.length) {
+                nextIndex = (nextIndex + 1) % playerOrder.length;
+                attempts++;
+            }
 
-        if (nextRound > room.config.rounds) {
-            transaction.update(roomRef, { status: "finished", turn: null });
+            const nextDrawerId = playerOrder[nextIndex];
+
+            // Check if new round
+            // If we wrapped around to index 0, increment round
+            let nextRound = room.currentRound;
+            if (nextIndex === 0) {
+                nextRound++;
+            }
+
+            if (nextRound > room.config.rounds) {
+                transaction.update(roomRef, { status: "finished", turn: null });
+                return;
+            }
+
+            const deadline = Timestamp.fromMillis(Date.now() + 15000); // 15s to choose
+
+            transaction.update(roomRef, {
+                currentRound: nextRound,
+                turn: {
+                    drawerId: nextDrawerId,
+                    phase: "choosing_difficulty",
+                    deadline,
+                    candidateWords: [],
+                    secretWord: "",
+                    correctGuessers: [],
+                }
+            });
+        });
+    } catch (e: any) {
+        // If precondition failed, it means the document changed under us (likely another client triggered nextTurn).
+        // This is expected in a distributed system with optimistic UI. We can safely ignore it if the outcome
+        // is what we wanted (turn advanced), or just log it as a non-fatal warning.
+        if (e.code === 'failed-precondition' || e.code === 'aborted') {
+            console.warn("nextTurn transaction contention (likely harmless race condition):", e.message);
             return;
         }
-
-        const deadline = Timestamp.fromMillis(Date.now() + 15000); // 15s to choose
-
-        transaction.update(roomRef, {
-            currentRound: nextRound,
-            turn: {
-                drawerId: nextDrawerId,
-                phase: "choosing_difficulty",
-                deadline,
-                candidateWords: [],
-                secretWord: "",
-                correctGuessers: [],
-            }
-        });
-    });
+        throw e;
+    }
 
     // Cleanup strokes from previous turn (best effort, non-blocking)
     const strokesRef = collection(db, "rooms", roomId, "draw_strokes");
@@ -248,6 +268,7 @@ export async function selectWord(roomId: string, word: string) {
             "turn.deadline": deadline,
             "turn.candidateWords": [], // Clear candidates to hide them
             "turn.correctGuessers": [],
+            "turn.hintIndices": Array.from({ length: word.length }, (_, i) => i).sort(() => Math.random() - 0.5),
         });
     });
 }
