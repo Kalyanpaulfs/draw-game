@@ -386,7 +386,7 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
 
     // WebRTC: Signaling & Peers
     useEffect(() => {
-        if (!userId || !roomId) return; // Wait for setup
+        if (!userId || !roomId) return;
 
         // Listen for signals
         const q = query(
@@ -401,41 +401,52 @@ export function VoiceChat({ roomId, userId, players }: VoiceChatProps) {
                     const senderId = data.senderId;
                     const signal = JSON.parse(data.signal);
 
+                    // Prevent self-connection (sanity check)
+                    if (senderId === userId) return;
+
+                    console.log(`Received signal from ${senderId}:`, signal.type);
+
+                    // 1. Existing Peer: Pass signal
                     if (peersRef.current[senderId]) {
-                        if (signal.type === "offer") {
-                            console.log(`Received new offer from existing peer ${senderId}. Resetting connection.`);
-                            if (peersRef.current[senderId].peer) {
-                                peersRef.current[senderId].peer.destroy();
-                            }
-                            delete peersRef.current[senderId];
-                            setPeers(prev => {
-                                const next = { ...prev };
-                                delete next[senderId];
-                                return next;
-                            });
-                            createPeer(senderId, false, signal);
-                        } else {
+                        try {
                             peersRef.current[senderId].peer.signal(signal);
+                        } catch (e) {
+                            console.error(`Error signaling peer ${senderId}:`, e);
                         }
-                    } else {
-                        createPeer(senderId, false, signal);
                     }
-                    deleteDoc(change.doc.ref);
+                    // 2. No Peer: Create one (Only if we are receiving an OFFER)
+                    else {
+                        if (signal.type === 'offer') {
+                            console.log(`Accepting offer from ${senderId}`);
+                            createPeer(senderId, false, signal);
+                        }
+                    }
+
+                    // Cleanup signal
+                    deleteDoc(change.doc.ref).catch(e => console.warn("Failed to delete signal", e));
                 }
             });
         });
 
-        // Trigger connections
+        // Trigger connections (Strict Initiator Logic)
+        // Only initiate if WE are the "larger" ID.
         Object.values(players).forEach((player) => {
-            if (player.id !== userId && !peersRef.current[player.id]) {
-                if (userId > player.id) {
+            if (player.id === userId) return;
+
+            const iAmInitiator = userId > player.id;
+
+            if (!peersRef.current[player.id]) {
+                if (iAmInitiator) {
+                    console.log(`I am initiator for ${player.id}. Creating Offer.`);
                     createPeer(player.id, true);
+                } else {
+                    console.log(`I am listener for ${player.id}. Waiting for Offer.`);
                 }
             }
         });
 
         return () => unsubscribe();
-    }, [userId, roomId, players, createPeer]); // stream removed from deps to prevent re-negotiation storm
+    }, [userId, roomId, players, createPeer]);
 
     // Draggable Logic
     const [position, setPosition] = useState({ x: 20, y: 100 });
