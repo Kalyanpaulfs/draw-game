@@ -123,6 +123,10 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
                 playTone(600, 'sine', 0.1);
                 playTone(800, 'sine', 0.1, 0.1);
                 break;
+            case SoundEvent.SETTINGS_CHANGE:
+                playTone(800, 'sine', 0.05);
+                playTone(1000, 'sine', 0.05, 0.05);
+                break;
             case SoundEvent.WORD_CHOSEN:
                 playTone(600, 'sine', 0.1);
                 playTone(900, 'sine', 0.1, 0.1);

@@ -11,6 +11,7 @@ export enum SoundEvent {
     PLAYER_UNREADY = 'player_unready',
     ROOM_READY = 'room_ready',
     GAME_START = 'game_start',
+    SETTINGS_CHANGE = 'settings_change',
 
     // Turn & Round
     DRAWER_SELECTED = 'drawer_selected',

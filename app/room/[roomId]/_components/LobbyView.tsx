@@ -1,10 +1,13 @@
 "use client";
 
-import { Room } from "@/lib/types";
-import { startGame, toggleReady } from "@/lib/room-actions";
-import { useState } from "react";
+import { Room, Player } from "@/lib/types";
+import { startGame, toggleReady, kickPlayer, updateRoomConfig } from "@/lib/room-actions";
+import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/game-utils";
 import { useRouter } from "next/navigation";
+import { useSound } from "@/hooks/SoundContext";
+import { SoundEvent } from "@/lib/sound-config";
+import { KickModal } from "@/app/_components/KickModal";
 
 interface LobbyViewProps {
     room: Room;
@@ -12,12 +15,9 @@ interface LobbyViewProps {
     roomId: string;
 }
 
-import { useEffect, useRef } from "react";
-import { useSound } from "@/hooks/SoundContext";
-import { SoundEvent } from "@/lib/sound-config";
-
 export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
     const [isStarting, setIsStarting] = useState(false);
+    const [pendingKick, setPendingKick] = useState<{ id: string; name: string } | null>(null);
     const { playSound } = useSound();
     const router = useRouter();
     const isHost = room.hostId === userId;
@@ -68,10 +68,35 @@ export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
         }
     }, [room.status, playSound]);
 
+    // Track config changes for sound
+    const prevConfigRef = useRef(room.config);
+    useEffect(() => {
+        if (JSON.stringify(room.config) !== JSON.stringify(prevConfigRef.current)) {
+            playSound(SoundEvent.SETTINGS_CHANGE);
+            prevConfigRef.current = room.config;
+        }
+    }, [room.config, playSound]);
+
 
 
     const handleCopyRoomId = () => {
         navigator.clipboard.writeText(roomId);
+    };
+
+    const handleKick = (targetUserId: string, targetName: string) => {
+        setPendingKick({ id: targetUserId, name: targetName });
+        playSound(SoundEvent.CLICK_SOFT);
+    };
+
+    const confirmKick = async () => {
+        if (!pendingKick) return;
+        try {
+            await kickPlayer(roomId, pendingKick.id, userId);
+            setPendingKick(null);
+        } catch (e) {
+            console.error(e);
+            alert("Failed to kick player");
+        }
     };
 
     return (
@@ -84,8 +109,19 @@ export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
                 <div className="absolute inset-0 md:static md:flex-1 md:h-full overflow-y-auto pr-2 custom-scrollbar z-0 touch-pan-y">
                     <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 pb-40 md:pb-0">
-                            {Object.values(room.players).map((p) => (
+                            {Object.values(room.players).map((p: Player) => (
                                 <div key={p.id} className="group relative">
+                                    {/* Kick Button (Host Only) */}
+                                    {isHost && p.id !== userId && (
+                                        <button
+                                            onClick={() => handleKick(p.id, p.name)}
+                                            className="absolute -top-1 -right-1 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-30 border-2 border-slate-900 sm:opacity-0 sm:group-hover:opacity-100 sm:scale-95 sm:group-hover:scale-110"
+                                            title="Kick Player"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                                        </button>
+                                    )}
+
                                     {/* Glow Effect */}
                                     <div className={cn(
                                         "absolute inset-0 rounded-2xl blur-xl transition-all duration-500",
@@ -162,6 +198,57 @@ export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
                 <div className="fixed bottom-0 left-0 right-0 md:static md:w-80 md:flex-none p-4 md:p-6 lg:p-8 md:pl-0 bg-slate-900/90 md:bg-transparent border-t md:border-t-0 md:border-l border-white/10 backdrop-blur-xl md:backdrop-blur-none z-50 pb-6 md:pb-0 safe-area-bottom">
                     <div className="flex flex-col gap-4">
 
+                        {/* Room Settings */}
+                        <div className="p-4 bg-white/[0.03] backdrop-blur-md rounded-2xl border border-white/5 space-y-4 shadow-inner">
+                            <div className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] text-center">Room Settings</div>
+
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Rounds</span>
+                                <div className="flex items-center gap-1">
+                                    {isHost ? (
+                                        <>
+                                            <button
+                                                onClick={() => updateRoomConfig(roomId, { rounds: room.config.rounds - 1 }, userId)}
+                                                disabled={room.config.rounds <= 1}
+                                                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/5 disabled:opacity-20 transition-colors flex items-center justify-center text-lg font-bold"
+                                            >-</button>
+                                            <span className="w-8 text-center text-sm font-black text-white">{room.config.rounds}</span>
+                                            <button
+                                                onClick={() => updateRoomConfig(roomId, { rounds: room.config.rounds + 1 }, userId)}
+                                                disabled={room.config.rounds >= 10}
+                                                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/5 disabled:opacity-20 transition-colors flex items-center justify-center text-lg font-bold"
+                                            >+</button>
+                                        </>
+                                    ) : (
+                                        <span className="px-3 py-1 bg-slate-800/50 rounded-lg text-sm font-black text-white">{room.config.rounds}</span>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Capacity</span>
+                                <div className="flex items-center gap-1">
+                                    {isHost ? (
+                                        <>
+                                            <button
+                                                onClick={() => updateRoomConfig(roomId, { maxPlayers: room.config.maxPlayers - 1 }, userId)}
+                                                disabled={room.config.maxPlayers <= 2}
+                                                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/5 disabled:opacity-20 transition-colors flex items-center justify-center text-lg font-bold"
+                                            >-</button>
+                                            <span className="w-8 text-center text-sm font-black text-white">{room.config.maxPlayers}</span>
+                                            <button
+                                                onClick={() => updateRoomConfig(roomId, { maxPlayers: room.config.maxPlayers + 1 }, userId)}
+                                                disabled={room.config.maxPlayers >= 12}
+                                                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/5 disabled:opacity-20 transition-colors flex items-center justify-center text-lg font-bold"
+                                            >+</button>
+                                        </>
+                                    ) : (
+                                        <span className="px-3 py-1 bg-slate-800/50 rounded-lg text-sm font-black text-white">{room.config.maxPlayers}</span>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Ready Button */}
                         <button
                             onClick={() => {
@@ -236,6 +323,13 @@ export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
                 .animate-scale-in { animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
                 @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
             `}</style>
+
+            <KickModal
+                isOpen={!!pendingKick}
+                playerName={pendingKick?.name || ""}
+                onClose={() => setPendingKick(null)}
+                onConfirm={confirmKick}
+            />
         </div>
     );
 }

@@ -564,3 +564,56 @@ export async function leaveRoom(roomId: string, userId: string) {
         }
     });
 }
+
+export async function kickPlayer(roomId: string, targetUserId: string, hostId: string) {
+    const roomRef = doc(db, "rooms", roomId);
+    await runTransaction(db, async (transaction) => {
+        const roomSnap = await transaction.get(roomRef);
+        if (!roomSnap.exists()) throw new Error("Room not found");
+
+        const room = roomSnap.data() as Room;
+
+        // Validation: Only host can kick
+        if (room.hostId !== hostId) {
+            throw new Error("Only the host can kick players");
+        }
+
+        // Validation: Host cannot kick themselves
+        if (targetUserId === hostId) {
+            throw new Error("You cannot kick yourself");
+        }
+
+        if (!room.players[targetUserId]) return; // Player already gone
+
+        const updates: any = {
+            [`players.${targetUserId}`]: deleteField()
+        };
+
+        // If game is in progress, we might need more cleanup, but as per plan, 
+        // this is primarily for the lobby.
+        transaction.update(roomRef, updates);
+    });
+}
+
+export async function updateRoomConfig(roomId: string, config: Partial<GameConfig>, requesterId: string) {
+    const roomRef = doc(db, "rooms", roomId);
+    await runTransaction(db, async (transaction) => {
+        const roomSnap = await transaction.get(roomRef);
+        if (!roomSnap.exists()) throw new Error("Room not found");
+
+        const room = roomSnap.data() as Room;
+        if (room.hostId !== requesterId) {
+            throw new Error("Only the host can update room settings");
+        }
+
+        const newConfig = { ...room.config, ...config };
+
+        // Basic validation
+        if (newConfig.maxPlayers < 2) newConfig.maxPlayers = 2;
+        if (newConfig.maxPlayers > 12) newConfig.maxPlayers = 12;
+        if (newConfig.rounds < 1) newConfig.rounds = 1;
+        if (newConfig.rounds > 10) newConfig.rounds = 10;
+
+        transaction.update(roomRef, { config: newConfig });
+    });
+}
