@@ -12,8 +12,8 @@ import GameView from "./_components/GameView";
 import GameOverView from "./_components/GameOverView";
 import { VoiceProvider } from "@/lib/voice";
 import { MicButton } from "./_components/MicButton";
-
 import { LeaveModal } from "@/app/_components/LeaveModal";
+import { ShareModal } from "@/app/_components/ShareModal";
 
 export default function RoomPage({ params }: { params: Promise<{ roomId: string }> }) {
     const { roomId } = use(params);
@@ -25,6 +25,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
     const [isJoining, setIsJoining] = useState(false);
     const [joinError, setJoinError] = useState("");
     const [showLeaveModal, setShowLeaveModal] = useState(false);
+    const [showShareModal, setShowShareModal] = useState(false);
 
     useEffect(() => {
 
@@ -48,10 +49,6 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
         setIsJoining(false);
     };
 
-    const copyLink = () => {
-        navigator.clipboard.writeText(window.location.href);
-        alert("Copied to clipboard!");
-    };
 
     if (roomLoading) return (
         <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
@@ -170,7 +167,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
                                             {roomId}
                                         </h1>
                                         <button
-                                            onClick={copyLink}
+                                            onClick={() => setShowShareModal(true)}
                                             className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 hover:text-indigo-400"
                                             title="Copy Code"
                                         >
@@ -200,7 +197,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
                         {/* Right: Actions */}
                         <div className="flex items-center gap-3">
                             <button
-                                onClick={copyLink}
+                                onClick={() => setShowShareModal(true)}
                                 className="group relative overflow-hidden bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg shadow-indigo-500/20 transition-all duration-300 transform active:scale-[0.98]"
                             >
                                 <span className="relative z-10 flex items-center gap-2">
@@ -233,6 +230,12 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
                         <LobbyView room={room} userId={userId} roomId={roomId} />
                     )}
                 </main>
+
+                <ShareModal
+                    isOpen={showShareModal}
+                    onClose={() => setShowShareModal(false)}
+                    roomId={roomId}
+                />
 
                 <LeaveModal
                     isOpen={showLeaveModal}
