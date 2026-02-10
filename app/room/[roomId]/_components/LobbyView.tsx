@@ -12,12 +12,61 @@ interface LobbyViewProps {
     roomId: string;
 }
 
+import { useEffect, useRef } from "react";
+import { useSound } from "@/hooks/SoundContext";
+import { SoundEvent } from "@/lib/sound-config";
+
 export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
     const [isStarting, setIsStarting] = useState(false);
+    const { playSound } = useSound();
     const router = useRouter();
     const isHost = room.hostId === userId;
     const playerCount = Object.keys(room.players).length;
     const player = room.players[userId]; // Current user's player object
+
+    // Track player join/leave and ready states
+    const prevPlayersRef = useRef<Record<string, boolean>>({});
+
+    useEffect(() => {
+        const currentPlayers = room.players;
+        const currentPlayerIds = Object.keys(currentPlayers);
+        const prevPlayerIds = Object.keys(prevPlayersRef.current);
+
+        // Handle join/leave
+        if (currentPlayerIds.length > prevPlayerIds.length) {
+            playSound(SoundEvent.PLAYER_JOIN);
+        } else if (currentPlayerIds.length < prevPlayerIds.length) {
+            playSound(SoundEvent.PLAYER_LEAVE);
+        }
+
+        // Handle ready state changes for any player
+        currentPlayerIds.forEach(id => {
+            const isReady = currentPlayers[id].isReady;
+            const wasReady = prevPlayersRef.current[id];
+
+            if (wasReady !== undefined && isReady !== wasReady) {
+                if (isReady) {
+                    playSound(SoundEvent.PLAYER_READY);
+                } else {
+                    playSound(SoundEvent.PLAYER_UNREADY);
+                }
+            }
+        });
+
+        // Update ref with current states
+        const newStates: Record<string, boolean> = {};
+        currentPlayerIds.forEach(id => {
+            newStates[id] = currentPlayers[id].isReady;
+        });
+        prevPlayersRef.current = newStates;
+    }, [room.players, playSound]);
+
+    // Track game start
+    useEffect(() => {
+        if (room.status === 'playing') {
+            playSound(SoundEvent.GAME_START);
+        }
+    }, [room.status, playSound]);
 
 
 
@@ -115,7 +164,9 @@ export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
 
                         {/* Ready Button */}
                         <button
-                            onClick={() => toggleReady(roomId, userId)}
+                            onClick={() => {
+                                toggleReady(roomId, userId);
+                            }}
                             className={cn(
                                 "w-full py-4 rounded-xl font-bold text-base uppercase tracking-widest transition-all duration-300 transform active:scale-[0.98] shadow-lg flex items-center justify-center gap-3",
                                 player?.isReady
@@ -141,6 +192,7 @@ export function LobbyView({ room, userId, roomId }: LobbyViewProps) {
                                 <div className="hidden md:block text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-3">Host Controls</div>
                                 <button
                                     onClick={async () => {
+                                        playSound(SoundEvent.CLICK_SOFT);
                                         setIsStarting(true);
                                         try { await startGame(roomId); } catch (e) { alert("Wait for everyone to be ready!"); }
                                         setIsStarting(false);

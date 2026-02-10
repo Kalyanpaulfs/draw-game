@@ -4,11 +4,14 @@ import { Room, Difficulty } from "@/lib/types";
 import { selectWord, selectDifficulty } from "@/lib/room-actions";
 import { useUser } from "@/hooks/useUser";
 import { useGameLoop } from "@/hooks/useGameLoop";
+import { useSound } from "@/hooks/SoundContext";
+import { SoundEvent } from "@/lib/sound-config";
 import { useState } from "react";
 import { cn } from "@/lib/game-utils";
 
 export function WordSelector({ room }: { room: Room }) {
     const { userId } = useUser();
+    const { playSound } = useSound();
     const { timeLeft } = useGameLoop(room, userId);
     const [loading, setLoading] = useState(false);
 
@@ -18,6 +21,7 @@ export function WordSelector({ room }: { room: Room }) {
     if (room.turn?.drawerId !== userId) return null;
 
     const handleSelectWord = async (word: string) => {
+        playSound(SoundEvent.WORD_CHOSEN);
         setLoading(true);
         try {
             await selectWord(room.roomId, word);
@@ -29,6 +33,7 @@ export function WordSelector({ room }: { room: Room }) {
     };
 
     const handleSelectDifficulty = async (diff: Difficulty) => {
+        playSound(SoundEvent.DIFFICULTY_SELECTED);
         setLoading(true);
         try {
             await selectDifficulty(room.roomId, diff);

@@ -24,6 +24,8 @@ export const viewport = {
   userScalable: false,
 };
 
+import { SoundProvider } from "@/hooks/SoundContext";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -34,7 +36,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <SoundProvider>
+          {children}
+        </SoundProvider>
       </body>
     </html>
   );

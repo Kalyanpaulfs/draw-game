@@ -3,15 +3,30 @@
 import { Room, Player } from "@/lib/types";
 import { resetGame } from "@/lib/room-actions";
 import { useUser } from "@/hooks/useUser";
+import { SoundEvent } from "@/lib/sound-config";
+import { useSound } from "@/hooks/SoundContext";
+import { useEffect } from "react";
 import Link from "next/link";
 
 export default function GameOverView({ room }: { room: Room }) {
     const { userId } = useUser();
+    const { playSound } = useSound();
     const players = Object.values(room.players).sort(
         (a, b) => b.score - a.score
     );
 
     const winner = players[0];
+
+    useEffect(() => {
+        playSound(SoundEvent.GAME_OVER);
+        if (winner && winner.score > 0) {
+            // Delay winner sound slightly
+            const timer = setTimeout(() => {
+                playSound(SoundEvent.WINNER);
+            }, 800);
+            return () => clearTimeout(timer);
+        }
+    }, [playSound, winner]);
 
     const handleReset = async () => {
         await resetGame(room.roomId);

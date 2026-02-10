@@ -10,16 +10,60 @@ import { TurnTimer } from "./TurnTimer";
 import { WordSelector } from "./WordSelector";
 import { RoundResultOverlay } from "./RoundResultOverlay";
 import { cn } from "@/lib/game-utils";
+import { SoundEvent } from "@/lib/sound-config";
+import { useSound } from "@/hooks/SoundContext";
 import { useState, useRef, useEffect } from "react";
 
 export default function GameView({ room }: { room: Room }) {
     const { userId, userName } = useUser();
     const { timeLeft } = useGameLoop(room, userId);
     const { messages } = useChat(room.roomId);
+    const { playSound } = useSound();
     const chatEndRef = useRef<HTMLDivElement>(null);
 
     const isDrawer = room.turn?.drawerId === userId;
     const drawerName = room.players[room.turn?.drawerId || ""]?.name;
+
+    // Track Phase & Drawer Changes
+    const prevPhaseRef = useRef<string | undefined>(room.turn?.phase);
+    const prevDrawerRef = useRef<string | undefined>(room.turn?.drawerId);
+
+    useEffect(() => {
+        if (!room.turn) return;
+
+        const currentPhase = room.turn.phase;
+        const prevPhase = prevPhaseRef.current;
+        const currentDrawer = room.turn.drawerId;
+        const prevDrawer = prevDrawerRef.current;
+
+        // Drawer Selected
+        if (currentDrawer !== prevDrawer) {
+            playSound(SoundEvent.DRAWER_SELECTED);
+        }
+
+        // Phase Changes
+        if (currentPhase !== prevPhase) {
+            if (currentPhase === 'choosing_word') {
+                playSound(SoundEvent.PHASE_CHOOSING_WORD);
+            } else if (currentPhase === 'drawing') {
+                playSound(SoundEvent.PHASE_DRAWING);
+            } else if (currentPhase === 'revealing') {
+                playSound(SoundEvent.ROUND_END);
+            }
+        }
+
+        prevPhaseRef.current = currentPhase;
+        prevDrawerRef.current = currentDrawer;
+    }, [room.turn?.phase, room.turn?.drawerId, playSound]);
+
+    // Timer Warning
+    const [lastWarningTime, setLastWarningTime] = useState(0);
+    useEffect(() => {
+        if (room.turn?.phase === 'drawing' && timeLeft <= 10 && timeLeft > 0 && timeLeft !== lastWarningTime) {
+            playSound(SoundEvent.TIMER_WARNING);
+            setLastWarningTime(timeLeft);
+        }
+    }, [timeLeft, room.turn?.phase, playSound, lastWarningTime]);
 
     const {
         canvasRef,
