@@ -268,8 +268,8 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
                     }}
                 />
 
-                {/* Floating Mic Button */}
-                <MicButton />
+                {/* Floating Mic Button - TEMPORARILY DISABLED FOR PRODUCTION */}
+                {/* <MicButton /> */}
             </div>
         </VoiceProvider>
     );
