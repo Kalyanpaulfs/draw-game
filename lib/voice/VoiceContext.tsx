@@ -214,6 +214,18 @@ export function VoiceProvider({
         peerManagerRef.current = pm;
         setPeerManagerState(pm);
 
+        // Add event listeners for connection monitoring
+        pm.on('connectionStateChange', (data) => {
+            const { peerId, state } = data as { peerId: string, state: string };
+            console.log(`[VoiceContext] Connection state for ${peerId}: ${state}`);
+        });
+
+        pm.on('peerFailed', (data) => {
+            const { peerId } = data as { peerId: string };
+            console.warn(`[VoiceContext] Peer connection failed: ${peerId}`);
+            // Could notify user via toast here
+        });
+
         console.log('[VoiceProvider] Auto-initialized PeerManager for DataChannels');
 
         return () => {

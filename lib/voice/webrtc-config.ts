@@ -18,14 +18,20 @@ export const ICE_SERVERS: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-
-    // Add TURN servers here for better reliability
-    // {
-    //   urls: 'turn:your-turn-server.com:3478',
-    //   username: 'user',
-    //   credential: 'pass',
-    // },
 ];
+
+// Add TURN servers from environment variables if available
+const turnUrl = process.env.NEXT_PUBLIC_TURN_URL;
+const turnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME;
+const turnCredential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
+
+if (turnUrl && turnUsername && turnCredential) {
+    ICE_SERVERS.push({
+        urls: turnUrl,
+        username: turnUsername,
+        credential: turnCredential,
+    });
+}
 
 // ============================================================================
 // RTCPeerConnection Configuration
@@ -149,7 +155,8 @@ export type PeerEvent =
     | 'remoteTrackRemoved'
     | 'iceCandidate'
     | 'needsOffer'
-    | 'needsAnswer';
+    | 'needsAnswer'
+    | 'connectionStateChange';
 
 export type SignalingMessage =
     | { type: 'offer'; sdp: string; from: string; to: string }

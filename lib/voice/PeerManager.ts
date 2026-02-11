@@ -418,6 +418,7 @@ export class PeerManager {
         connection.onconnectionstatechange = () => {
             peerInfo.connectionState = connection.connectionState;
             console.log(`[PeerManager] Peer ${peerId} connection state: ${connection.connectionState}`);
+            this.emit('connectionStateChange', { peerId, state: connection.connectionState });
 
             switch (connection.connectionState) {
                 case 'connected':
@@ -438,21 +439,37 @@ export class PeerManager {
                     }
                     break;
                 case 'disconnected':
+                    this.emit('peerDisconnected', { peerId });
+                    // Disconnected can be transient (e.g. switching wifi/cellular).
+                    // If it stays disconnected for 5s, try ICE restart.
+                    console.log(`[PeerManager] Peer ${peerId} disconnected. Waiting for recovery...`);
+                    setTimeout(() => {
+                        const currentPeer = this.peers.get(peerId);
+                        if (currentPeer && currentPeer.connection.connectionState === 'disconnected') {
+                            console.log(`[PeerManager] Peer ${peerId} still disconnected after 5s. Triggering ICE restart.`);
+                            this.restartIce(peerId);
+                        }
+                    }, 5000);
+                    break;
                 case 'closed':
                     this.emit('peerDisconnected', { peerId });
                     break;
                 case 'failed':
                     this.emit('peerFailed', { peerId });
-                    // Full peer re-creation instead of ICE restart.
-                    // ICE restart alone can't fix DTLS certificate mismatches
-                    // (e.g. caused by HMR/Fast Refresh recreating one side).
-                    console.log(`[PeerManager] Connection failed for ${peerId}, will recreate peer`);
+                    // Try ICE restart first for production resilience
+                    console.log(`[PeerManager] Connection failed for ${peerId}, attempting ICE restart...`);
+                    this.restartIce(peerId);
+
+                    // Fallback to full recreation if ICE restart doesn't work after 10s
                     setTimeout(() => {
-                        this.removePeer(peerId);
-                        const isInitiator = this.localUserId < peerId;
-                        this.createPeer(peerId, isInitiator);
-                        console.log(`[PeerManager] Recreated peer ${peerId} (initiator=${isInitiator})`);
-                    }, 2000);
+                        const currentPeer = this.peers.get(peerId);
+                        if (currentPeer && (currentPeer.connection.connectionState === 'failed' || currentPeer.connection.connectionState === 'disconnected')) {
+                            console.log(`[PeerManager] ICE restart failed for ${peerId}, recreating peer completely.`);
+                            this.removePeer(peerId);
+                            const isInitiator = this.localUserId < peerId;
+                            this.createPeer(peerId, isInitiator);
+                        }
+                    }, 10000);
                     break;
             }
         };
@@ -492,7 +509,7 @@ export class PeerManager {
         };
     }
 
-    private async restartIce(peerId: string): Promise<void> {
+    public async restartIce(peerId: string): Promise<void> {
         const peerInfo = this.peers.get(peerId);
         if (!peerInfo) return;
 

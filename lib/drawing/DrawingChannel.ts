@@ -132,6 +132,12 @@ export class DrawingChannel {
     sendTo(peerId: string, message: DrawingMessage): void {
         const channel = this.channels.get(peerId);
         if (channel && channel.readyState === 'open') {
+            // Protect against buffer overflow (64KB limit)
+            if (channel.bufferedAmount > 64 * 1024) {
+                console.warn(`[DrawingChannel] Buffer full for ${peerId}, dropping message`);
+                return;
+            }
+
             try {
                 channel.send(JSON.stringify(message));
             } catch (error) {
@@ -147,6 +153,12 @@ export class DrawingChannel {
         const data = JSON.stringify(message);
         for (const [peerId, channel] of this.channels) {
             if (channel.readyState === 'open') {
+                // Protect against buffer overflow (64KB limit)
+                if (channel.bufferedAmount > 64 * 1024) {
+                    console.warn(`[DrawingChannel] Buffer full for ${peerId}, dropping broadcast`);
+                    continue;
+                }
+
                 try {
                     channel.send(data);
                 } catch (error) {
