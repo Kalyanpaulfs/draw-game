@@ -25,8 +25,11 @@ const turnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME;
 const turnCredential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
 
 if (turnUrl && turnUsername && turnCredential) {
+    // Support multiple TURN URLs separated by commas or semicolons
+    const urls = turnUrl.split(/[,;]/).map(url => url.trim()).filter(url => url.length > 0);
+
     ICE_SERVERS.push({
-        urls: turnUrl,
+        urls: urls,
         username: turnUsername,
         credential: turnCredential,
     });
