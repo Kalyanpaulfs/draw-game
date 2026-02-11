@@ -437,6 +437,21 @@ export class PeerManager {
                             this.onDataChannel?.(peerId, newChannel);
                         }
                     }
+
+                    // Log connection stats to verify TURN usage
+                    connection.getStats().then(stats => {
+                        stats.forEach(report => {
+                            if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                                const localCandidate = stats.get(report.localCandidateId);
+                                const remoteCandidate = stats.get(report.remoteCandidateId);
+                                console.log(`[PeerManager] Active Pair for ${peerId}:`,
+                                    `${localCandidate?.candidateType} <-> ${remoteCandidate?.candidateType}`,
+                                    `(Protocol: ${localCandidate?.protocol})`
+                                );
+                            }
+                        });
+                    }).catch(e => console.error('[PeerManager] Failed to get stats:', e));
+
                     break;
                 case 'disconnected':
                     this.emit('peerDisconnected', { peerId });

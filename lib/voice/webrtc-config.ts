@@ -20,7 +20,6 @@ export const ICE_SERVERS: RTCIceServer[] = [
     { urls: 'stun:stun2.l.google.com:19302' },
 ];
 
-// Add TURN servers from environment variables if available
 const turnUrl = process.env.NEXT_PUBLIC_TURN_URL;
 const turnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME;
 const turnCredential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
@@ -31,6 +30,11 @@ if (turnUrl && turnUsername && turnCredential) {
         username: turnUsername,
         credential: turnCredential,
     });
+} else {
+    // Only warn if we are in production or trying to force relay
+    if (process.env.NODE_ENV === 'production' || process.env.NEXT_PUBLIC_FORCE_TURN === 'true') {
+        console.warn('[WebRTC] TURN server not configured. P2P may fail on strict networks.');
+    }
 }
 
 // ============================================================================
@@ -48,7 +52,8 @@ export const RTC_CONFIG: RTCConfiguration = {
     sdpSemantics: 'unified-plan',
 
     // Use all transports (prefer UDP for lower latency)
-    iceTransportPolicy: 'all',
+    // If NEXT_PUBLIC_FORCE_TURN is set, force relay (for testing/strict networks)
+    iceTransportPolicy: process.env.NEXT_PUBLIC_FORCE_TURN === 'true' ? 'relay' : 'all',
 
     // Bundle media together for efficiency
     bundlePolicy: 'max-bundle',
