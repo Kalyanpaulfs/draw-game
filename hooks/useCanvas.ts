@@ -1,50 +1,82 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { collection, addDoc, onSnapshot, query, orderBy, Timestamp, getDocs, deleteDoc, writeBatch, limit } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { Room } from "@/lib/types";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { useDrawing } from "@/lib/drawing";
+import { DrawPoint, Stroke } from "@/lib/drawing/DrawingTypes";
 
-export type Point = { x: number; y: number };
+export type { DrawPoint as Point };
 
-export type Stroke = {
-    id?: string;
-    color: string;
-    size: number;
-    points: Point[];
-    timestamp: Timestamp;
-};
+// Generate a unique stroke ID
+let strokeCounter = 0;
+function generateStrokeId(): string {
+    return `s_${Date.now()}_${++strokeCounter}`;
+}
 
-export function useCanvas(roomId: string, userId: string, isDrawer: boolean) {
+export function useCanvas(isDrawer: boolean) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [color, setColor] = useState("#000000");
     const [size, setSize] = useState(5);
     const isDrawing = useRef(false);
-    const currentStroke = useRef<Point[]>([]);
+    const currentStrokeId = useRef<string | null>(null);
+    const moveCount = useRef(0);
+    const startPoint = useRef<DrawPoint | null>(null);
 
-    // Draw a single stroke with smoothing
-    const drawStroke = (ctx: CanvasRenderingContext2D, points: Point[], strokeColor: string, strokeSize: number) => {
+    const {
+        strokes,
+        strokeVersion,
+        startStroke,
+        addPoint,
+        endStroke,
+        addDot,
+        undoStroke,
+        redoStroke,
+        clearBoard: clearDrawing,
+    } = useDrawing();
+
+    // -------------------------------------------------------------------------
+    // Canvas Rendering
+    // -------------------------------------------------------------------------
+
+    /** Draw a single dot (filled circle) */
+    const drawDot = useCallback((ctx: CanvasRenderingContext2D, point: DrawPoint, dotColor: string, dotSize: number) => {
+        ctx.fillStyle = dotColor;
+        ctx.beginPath();
+        ctx.arc(
+            point.x * ctx.canvas.width,
+            point.y * ctx.canvas.height,
+            dotSize / 2,
+            0,
+            Math.PI * 2
+        );
+        ctx.fill();
+    }, []);
+
+    /** Draw a stroke with smoothing */
+    const drawStroke = useCallback((ctx: CanvasRenderingContext2D, stroke: Stroke) => {
+        const { points, color: strokeColor, brushSize } = stroke;
+
+        // Single-point stroke → render as dot
+        if (points.length === 1) {
+            drawDot(ctx, points[0], strokeColor, brushSize);
+            return;
+        }
+
         if (points.length < 2) return;
 
         ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = strokeSize;
+        ctx.lineWidth = brushSize;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.beginPath();
 
-        // Move to first point
         ctx.moveTo(points[0].x * ctx.canvas.width, points[0].y * ctx.canvas.height);
 
-        // Draw curves between points
         for (let i = 1; i < points.length - 1; i++) {
             const p1 = points[i];
             const p2 = points[i + 1];
-
-            // Calculate midpoint
             const midX = (p1.x + p2.x) / 2;
             const midY = (p1.y + p2.y) / 2;
 
-            // Quadratic curve to midpoint using p1 as control point
             ctx.quadraticCurveTo(
                 p1.x * ctx.canvas.width,
                 p1.y * ctx.canvas.height,
@@ -53,161 +85,102 @@ export function useCanvas(roomId: string, userId: string, isDrawer: boolean) {
             );
         }
 
-        // Draw last line segment to the final point
         const last = points[points.length - 1];
         ctx.lineTo(last.x * ctx.canvas.width, last.y * ctx.canvas.height);
-
         ctx.stroke();
-    };
+    }, [drawDot]);
 
-    // Sync: Listen for incoming strokes
+    // Re-render canvas whenever strokes change
     useEffect(() => {
-        if (!roomId || !canvasRef.current) return;
         const canvas = canvasRef.current;
+        if (!canvas) return;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        const strokesRef = collection(db, "rooms", roomId, "draw_strokes");
-        const q = query(strokesRef, orderBy("timestamp", "asc"));
+        console.log(`[useCanvas] Repainting ${strokes.length} strokes (v=${strokeVersion})`);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            // Opt: We could clear and redraw everything to handle deletions/clearing board
-            // Or just draw new additions. For "Clear Board", we need to detect a full wipe.
-            // If snapshot is empty but we have content, it means board was cleared.
+        for (const stroke of strokes) {
+            drawStroke(ctx, stroke);
+        }
+    }, [strokeVersion, strokes, drawStroke]);
 
-            if (snapshot.empty) {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                return;
-            }
+    // Safety: stop drawing if role changes during a stroke
+    useEffect(() => {
+        if (!isDrawer) {
+            isDrawing.current = false;
+            currentStrokeId.current = null;
+        }
+    }, [isDrawer]);
 
-            // If multiple changes, easier to redraw all for correctness (z-index)
-            // Limitation: Performance dip if 1000s of strokes. 
-            // Optimization: Only redraw if "type === modified" or "removed".
-            // For MVP: Redraw all on every snapshot is safest implementation.
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // -------------------------------------------------------------------------
+    // Drawing Event Handlers
+    // -------------------------------------------------------------------------
 
-            snapshot.forEach((doc) => {
-                const data = doc.data() as Stroke;
-                drawStroke(ctx, data.points, data.color, data.size);
-            });
-        });
-
-        return () => unsubscribe();
-    }, [roomId]);
-
-    // Local Drawing Handlers
-    const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
+    const handleStartDrawing = useCallback((e: React.MouseEvent | React.TouchEvent) => {
         if (!isDrawer || !canvasRef.current) return;
-        isDrawing.current = true;
-        const point = getPoint(e, canvasRef.current);
-        if (point) currentStroke.current = [point];
-    };
-
-    const draw = (e: React.MouseEvent | React.TouchEvent) => {
-        if (!isDrawer || !isDrawing.current || !canvasRef.current) return;
-        const ctx = canvasRef.current.getContext("2d");
-        if (!ctx) return;
 
         const point = getPoint(e, canvasRef.current);
         if (!point) return;
 
-        // Draw locally immediately
-        const lastPoint = currentStroke.current[currentStroke.current.length - 1];
+        isDrawing.current = true;
+        moveCount.current = 0;
+        startPoint.current = point;
 
-        ctx.strokeStyle = color;
-        ctx.lineWidth = size;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.beginPath();
-        ctx.moveTo(lastPoint.x * ctx.canvas.width, lastPoint.y * ctx.canvas.height);
-        ctx.lineTo(point.x * ctx.canvas.width, point.y * ctx.canvas.height);
-        ctx.stroke();
+        const strokeId = generateStrokeId();
+        currentStrokeId.current = strokeId;
 
-        currentStroke.current.push(point);
-    };
+        startStroke(strokeId, color, size, point);
+    }, [isDrawer, color, size, startStroke]);
 
-    const redoStack = useRef<Stroke[]>([]);
+    const handleDraw = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+        if (!isDrawer || !isDrawing.current || !canvasRef.current || !currentStrokeId.current) return;
 
-    // Undo: Remove last stroke and save to redo stack
-    const undo = async () => {
-        if (!roomId || !isDrawer) return;
+        const point = getPoint(e, canvasRef.current);
+        if (!point) return;
 
-        try {
-            const strokesRef = collection(db, "rooms", roomId, "draw_strokes");
-            // Get the last stroke
-            const q = query(strokesRef, orderBy("timestamp", "desc"), limit(1));
-            const snapshot = await getDocs(q);
+        moveCount.current++;
+        addPoint(currentStrokeId.current, point);
+    }, [isDrawer, addPoint]);
 
-            if (!snapshot.empty) {
-                const lastDoc = snapshot.docs[0];
-                const data = lastDoc.data() as Stroke;
-
-                // Save to redo stack
-                redoStack.current.push(data);
-
-                // Delete from DB
-                await deleteDoc(lastDoc.ref);
-            }
-        } catch (e) {
-            console.error("Undo failed:", e);
-        }
-    };
-
-    // Redo: Restore last undone stroke
-    const redo = async () => {
-        if (!roomId || !isDrawer || redoStack.current.length === 0) return;
-
-        const strokeToRestore = redoStack.current.pop();
-        if (!strokeToRestore) return;
-
-        try {
-            await addDoc(collection(db, "rooms", roomId, "draw_strokes"), {
-                ...strokeToRestore,
-                timestamp: Timestamp.now(), // New timestamp to put it at the end
-            });
-        } catch (e) {
-            console.error("Redo failed:", e);
-            // Put it back if failed? Nah, simple retry is fine or ignore.
-        }
-    };
-
-    const stopDrawing = async () => {
+    const handleStopDrawing = useCallback(() => {
         if (!isDrawer || !isDrawing.current) return;
         isDrawing.current = false;
 
-        if (currentStroke.current.length > 0) {
-            // New drawing clears redo history
-            redoStack.current = [];
+        const strokeId = currentStrokeId.current;
+        if (!strokeId) return;
 
-            // Sync to Firestore
-            try {
-                await addDoc(collection(db, "rooms", roomId, "draw_strokes"), {
-                    color,
-                    size,
-                    points: currentStroke.current,
-                    timestamp: Timestamp.now(),
-                });
-            } catch (e) {
-                console.error("Failed to save stroke", e);
-            }
+        // Detect dot: no movement at all
+        if (moveCount.current === 0 && startPoint.current) {
+            // This was a single-tap — the stroke-start already registered 1 point.
+            // Just finalize it — it'll render as a dot (single-point stroke).
+            endStroke(strokeId);
+        } else {
+            endStroke(strokeId);
         }
-        currentStroke.current = [];
-    };
 
-    const clearBoard = async () => {
-        // Delete all documents in subcollection
-        // Note: Client-side delete of all docs is slow/costly. 
-        // Better: Admin/Server action. 
-        // MVP Hack: Iterate and delete.
-        const strokesRef = collection(db, "rooms", roomId, "draw_strokes");
-        const snapshot = await getDocs(strokesRef);
-        const batch = writeBatch(db);
-        snapshot.docs.forEach((doc) => {
-            batch.delete(doc.ref);
-        });
-        await batch.commit();
-        redoStack.current = []; // Clear redo stack on clear board? Yes.
-    };
+        currentStrokeId.current = null;
+        startPoint.current = null;
+    }, [isDrawer, endStroke]);
+
+    // -------------------------------------------------------------------------
+    // Undo / Redo / Clear
+    // -------------------------------------------------------------------------
+
+    const undo = useCallback(() => {
+        if (!isDrawer) return;
+        undoStroke();
+    }, [isDrawer, undoStroke]);
+
+    const redo = useCallback(() => {
+        if (!isDrawer) return;
+        redoStroke();
+    }, [isDrawer, redoStroke]);
+
+    const clearBoard = useCallback(() => {
+        if (!isDrawer) return;
+        clearDrawing();
+    }, [isDrawer, clearDrawing]);
 
     return {
         canvasRef,
@@ -216,16 +189,19 @@ export function useCanvas(roomId: string, userId: string, isDrawer: boolean) {
         size,
         setSize,
         clearBoard,
-        startDrawing,
-        draw,
-        stopDrawing,
+        startDrawing: handleStartDrawing,
+        draw: handleDraw,
+        stopDrawing: handleStopDrawing,
         undo,
-        redo
+        redo,
     };
 }
 
-// Helper to get normalized 0-1 coordinates
-function getPoint(e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement): Point | null {
+// ============================================================================
+// Helpers
+// ============================================================================
+
+function getPoint(e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement): DrawPoint | null {
     const rect = canvas.getBoundingClientRect();
     let clientX, clientY;
 
@@ -241,7 +217,6 @@ function getPoint(e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElem
     const x = (clientX - rect.left) / rect.width;
     const y = (clientY - rect.top) / rect.height;
 
-    // Clamp to 0-1 to prevent drawing outside implicitly or weird scaling issues
     return {
         x: Math.max(0, Math.min(1, x)),
         y: Math.max(0, Math.min(1, y)),

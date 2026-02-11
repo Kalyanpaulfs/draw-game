@@ -270,14 +270,6 @@ export async function nextTurn(roomId: string) {
         throw e;
     }
 
-    // Cleanup strokes from previous turn (best effort, non-blocking)
-    const strokesRef = collection(db, "rooms", roomId, "draw_strokes");
-    const snapshot = await getDocs(strokesRef);
-    if (!snapshot.empty) {
-        const batch = writeBatch(db);
-        snapshot.docs.forEach((d) => batch.delete(d.ref));
-        await batch.commit().catch(console.error);
-    }
 }
 
 export async function selectDifficulty(roomId: string, difficulty: Difficulty) {
@@ -510,14 +502,6 @@ export async function resetGame(roomId: string) {
         await batch.commit().catch(console.error);
     }
 
-    // Cleanup all strokes
-    const strokesRef = collection(db, "rooms", roomId, "draw_strokes");
-    const snapshot = await getDocs(strokesRef);
-    if (!snapshot.empty) {
-        const batch = writeBatch(db);
-        snapshot.docs.forEach((d) => batch.delete(d.ref));
-        await batch.commit().catch(console.error);
-    }
 }
 
 export async function toggleReady(roomId: string, userId: string) {

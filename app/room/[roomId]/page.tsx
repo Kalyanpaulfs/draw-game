@@ -10,10 +10,31 @@ import { Room } from "@/lib/types";
 import { LobbyView } from "./_components/LobbyView";
 import GameView from "./_components/GameView";
 import GameOverView from "./_components/GameOverView";
-import { VoiceProvider } from "@/lib/voice";
+import { VoiceProvider, useVoiceContext } from "@/lib/voice";
+import { DrawingProvider } from "@/lib/drawing";
 import { MicButton } from "./_components/MicButton";
 import { LeaveModal } from "@/app/_components/LeaveModal";
 import { ShareModal } from "@/app/_components/ShareModal";
+
+// Bridge component: uses VoiceContext to get peerManager, then provides DrawingContext
+function GameWithDrawing({ room, userId }: { room: Room; userId: string }) {
+    const { peerManager } = useVoiceContext();
+    const drawerId = room.turn?.drawerId || "";
+    const isDrawer = drawerId === userId;
+
+    return (
+        <DrawingProvider
+            peerManager={peerManager}
+            roomId={room.roomId}
+            userId={userId}
+            isDrawer={isDrawer}
+            drawerId={drawerId}
+            phase={room.turn?.phase}
+        >
+            <GameView room={room} />
+        </DrawingProvider>
+    );
+}
 
 export default function RoomPage({ params }: { params: Promise<{ roomId: string }> }) {
     const { roomId } = use(params);
@@ -222,7 +243,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
                 <main className={`relative z-10 flex-1 flex flex-col items-center w-full mx-auto ${room.status === "playing" ? "h-full p-0 max-w-none justify-center" : room.status === "finished" ? "h-full p-0 max-w-none" : "p-4 md:p-6 max-w-7xl justify-center"}`}>
                     {room.status === "playing" ? (
                         <div className="w-full h-full">
-                            <GameView room={room} />
+                            <GameWithDrawing room={room} userId={userId} />
                         </div>
                     ) : room.status === "finished" ? (
                         <GameOverView room={room} />

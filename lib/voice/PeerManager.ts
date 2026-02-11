@@ -19,6 +19,10 @@ import {
     PeerEvent,
     SignalingMessage,
 } from './webrtc-config';
+import {
+    DRAWING_CHANNEL_LABEL,
+    DRAWING_CHANNEL_OPTIONS,
+} from '../drawing/DrawingTypes';
 import { getAudioManager } from './AudioManager';
 
 // ============================================================================
@@ -32,6 +36,7 @@ interface PeerManagerOptions {
     onSignalingMessage: (message: SignalingMessage) => void;
     onRemoteStream: (peerId: string, stream: MediaStream) => void;
     onRemoteStreamRemoved: (peerId: string) => void;
+    onDataChannel?: (peerId: string, channel: RTCDataChannel) => void;
 }
 
 // Extended peer info with ICE candidate queue
@@ -40,6 +45,7 @@ interface ExtendedPeerInfo extends PeerConnectionInfo {
     hasRemoteDescription: boolean;
     isNegotiating: boolean;
     makingOffer: boolean;
+    dataChannel?: RTCDataChannel;
 }
 
 // ============================================================================
@@ -53,6 +59,7 @@ export class PeerManager {
     private onSignalingMessage: (message: SignalingMessage) => void;
     private onRemoteStream: (peerId: string, stream: MediaStream) => void;
     private onRemoteStreamRemoved: (peerId: string) => void;
+    private onDataChannel?: (peerId: string, channel: RTCDataChannel) => void;
 
     // Track subscription to AudioManager
     private audioManagerSubscribed = false;
@@ -62,6 +69,7 @@ export class PeerManager {
         this.onSignalingMessage = options.onSignalingMessage;
         this.onRemoteStream = options.onRemoteStream;
         this.onRemoteStreamRemoved = options.onRemoteStreamRemoved;
+        this.onDataChannel = options.onDataChannel;
 
         // Subscribe to AudioManager track events
         this.subscribeToAudioManager();
@@ -162,6 +170,17 @@ export class PeerManager {
             const transceiver = connection.addTransceiver('audio', { direction: 'sendrecv' });
             peerInfo.audioSender = transceiver.sender;
             console.log(`[PeerManager] Added sendrecv transceiver for peer ${peerId}`);
+        }
+
+        // Create drawing DataChannel if we're the initiator
+        if (isInitiator) {
+            const drawingChannel = connection.createDataChannel(
+                DRAWING_CHANNEL_LABEL,
+                DRAWING_CHANNEL_OPTIONS
+            );
+            peerInfo.dataChannel = drawingChannel;
+            this.onDataChannel?.(peerId, drawingChannel);
+            console.log(`[PeerManager] Created drawing DataChannel for ${peerId}`);
         }
 
         // If we're the initiator, create offer
@@ -403,6 +422,20 @@ export class PeerManager {
             switch (connection.connectionState) {
                 case 'connected':
                     this.emit('peerConnected', { peerId });
+                    // After ICE restart, the old DataChannel may have closed.
+                    // Recreate it if we're the initiator and the old one is dead.
+                    if (peerInfo.dataChannel && peerInfo.dataChannel.readyState !== 'open') {
+                        const isInitiator = this.localUserId < peerId;
+                        if (isInitiator) {
+                            console.log(`[PeerManager] Recreating DataChannel for ${peerId} after reconnection`);
+                            const newChannel = connection.createDataChannel(
+                                DRAWING_CHANNEL_LABEL,
+                                DRAWING_CHANNEL_OPTIONS
+                            );
+                            peerInfo.dataChannel = newChannel;
+                            this.onDataChannel?.(peerId, newChannel);
+                        }
+                    }
                     break;
                 case 'disconnected':
                 case 'closed':
@@ -410,7 +443,16 @@ export class PeerManager {
                     break;
                 case 'failed':
                     this.emit('peerFailed', { peerId });
-                    this.restartIce(peerId);
+                    // Full peer re-creation instead of ICE restart.
+                    // ICE restart alone can't fix DTLS certificate mismatches
+                    // (e.g. caused by HMR/Fast Refresh recreating one side).
+                    console.log(`[PeerManager] Connection failed for ${peerId}, will recreate peer`);
+                    setTimeout(() => {
+                        this.removePeer(peerId);
+                        const isInitiator = this.localUserId < peerId;
+                        this.createPeer(peerId, isInitiator);
+                        console.log(`[PeerManager] Recreated peer ${peerId} (initiator=${isInitiator})`);
+                    }, 2000);
                     break;
             }
         };
@@ -436,6 +478,16 @@ export class PeerManager {
                 peerInfo.audioReceiver = event.receiver;
                 this.onRemoteStream(peerId, stream);
                 this.emit('remoteTrackAdded', { peerId, stream });
+            }
+        };
+
+        // Incoming DataChannel (for non-initiator side)
+        connection.ondatachannel = (event) => {
+            const channel = event.channel;
+            console.log(`[PeerManager] Received DataChannel '${channel.label}' from ${peerId}`);
+            if (channel.label === DRAWING_CHANNEL_LABEL) {
+                peerInfo.dataChannel = channel;
+                this.onDataChannel?.(peerId, channel);
             }
         };
     }
@@ -480,6 +532,25 @@ export class PeerManager {
 
     getAllPeers(): Map<string, PeerConnectionInfo> {
         return new Map(this.peers);
+    }
+
+    /**
+     * Set the DataChannel callback (allows late binding by DrawingContext).
+     * Replays existing channels to the new handler so late-mounting consumers
+     * don't miss channels created during voice join.
+     */
+    setOnDataChannel(handler: ((peerId: string, channel: RTCDataChannel) => void) | undefined): void {
+        this.onDataChannel = handler;
+
+        // Replay existing DataChannels to the new handler
+        if (handler) {
+            for (const [peerId, peerInfo] of this.peers) {
+                if (peerInfo.dataChannel) {
+                    console.log(`[PeerManager] Replaying DataChannel for ${peerId}`);
+                    handler(peerId, peerInfo.dataChannel);
+                }
+            }
+        }
     }
 
     // ---------------------------------------------------------------------------

@@ -77,7 +77,7 @@ export default function GameView({ room }: { room: Room }) {
         stopDrawing,
         undo,
         redo
-    } = useCanvas(room.roomId, userId, isDrawer);
+    } = useCanvas(isDrawer);
 
     const [guess, setGuess] = useState("");
 

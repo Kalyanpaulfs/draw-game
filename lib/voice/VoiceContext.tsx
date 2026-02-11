@@ -47,6 +47,9 @@ interface VoiceContextState {
     connectedPeers: string[];
     remoteStreams: Map<string, MediaStream>;
 
+    // Peer manager (for DataChannel access)
+    peerManager: PeerManager | null;
+
     // Error
     error: Error | null;
 }
@@ -108,69 +111,47 @@ export function VoiceProvider({
     const [connectedPeers, setConnectedPeers] = useState<string[]>([]);
     const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
     const [error, setError] = useState<Error | null>(null);
+    const [peerManagerState, setPeerManagerState] = useState<PeerManager | null>(null);
 
     // ---------------------------------------------------------------------------
-    // Initialize Managers
+    // Initialize Audio & Recovery Managers
     // ---------------------------------------------------------------------------
 
     useEffect(() => {
-        // Initialize AudioManager
         audioManagerRef.current = getAudioManager();
-
-        // Initialize RecoveryManager  
         recoveryManagerRef.current = getRecoveryManager();
 
-        // Subscribe to AudioManager events
         const am = audioManagerRef.current;
-
         am.on('stateChange', () => {
             const state = am.getState();
             setIsReady(state.status === 'ready');
-
             if (state.status === 'error') {
                 setError(state.error);
                 setStatus('error');
             }
         });
-
         am.on('muted', () => setIsMuted(true));
         am.on('unmuted', () => setIsMuted(false));
 
-        // Subscribe to RecoveryManager events
         const rm = recoveryManagerRef.current;
-
-        rm.on('recoveryStarted', () => {
-            setStatus('reconnecting');
-        });
-
-        rm.on('recoveryCompleted', () => {
-            setStatus('connected');
-        });
-
-        rm.on('recoveryFailed', () => {
-            setStatus('error');
-        });
-
+        rm.on('recoveryStarted', () => setStatus('reconnecting'));
+        rm.on('recoveryCompleted', () => setStatus('connected'));
+        rm.on('recoveryFailed', () => setStatus('error'));
         rm.on('networkChanged', (data) => {
             const { online } = data as { online: boolean };
             setIsNetworkOnline(online);
         });
 
-        // Cleanup
-        return () => {
-            // Note: We don't dispose managers here as they may be shared
-            // Disposal happens in leaveVoice()
-        };
+        return () => { };
     }, []);
 
     // ---------------------------------------------------------------------------
-    // Handle Signaling Messages
+    // Signaling & Stream Callbacks
     // ---------------------------------------------------------------------------
 
     const handleSignalingMessage = useCallback((message: SignalingMessage) => {
         const pm = peerManagerRef.current;
         if (!pm) return;
-
         switch (message.type) {
             case 'offer':
                 pm.handleOffer(message.from, message.sdp);
@@ -184,21 +165,14 @@ export function VoiceProvider({
         }
     }, []);
 
-    // ---------------------------------------------------------------------------
-    // Handle Remote Streams
-    // ---------------------------------------------------------------------------
-
     const handleRemoteStream = useCallback((peerId: string, stream: MediaStream) => {
         setRemoteStreams(prev => {
             const next = new Map(prev);
             next.set(peerId, stream);
             return next;
         });
-
         setConnectedPeers(prev => {
-            if (!prev.includes(peerId)) {
-                return [...prev, peerId];
-            }
+            if (!prev.includes(peerId)) return [...prev, peerId];
             return prev;
         });
     }, []);
@@ -209,12 +183,76 @@ export function VoiceProvider({
             next.delete(peerId);
             return next;
         });
-
         setConnectedPeers(prev => prev.filter(id => id !== peerId));
     }, []);
 
     // ---------------------------------------------------------------------------
-    // Join Voice
+    // Auto-initialize PeerManager & Signaling for DataChannels
+    // This runs on mount so drawing DataChannels work without voice join.
+    // ---------------------------------------------------------------------------
+
+    // Effect 1: Create PeerManager + Signaling (lifecycle)
+    useEffect(() => {
+        // Initialize signaling
+        const signaling = new VoiceSignaling({
+            roomId,
+            localUserId: userId,
+            onMessage: handleSignalingMessage,
+        });
+        signaling.start();
+        signalingRef.current = signaling;
+
+        // Initialize PeerManager (without audio — just for DataChannels)
+        const pm = new PeerManager({
+            localUserId: userId,
+            onSignalingMessage: async (msg) => {
+                await signalingRef.current?.send(msg);
+            },
+            onRemoteStream: handleRemoteStream,
+            onRemoteStreamRemoved: handleRemoteStreamRemoved,
+        });
+        peerManagerRef.current = pm;
+        setPeerManagerState(pm);
+
+        console.log('[VoiceProvider] Auto-initialized PeerManager for DataChannels');
+
+        return () => {
+            console.log('[VoiceProvider] Cleaning up PeerManager and signaling');
+            signaling.stop();
+            signalingRef.current = null;
+            pm.dispose();
+            peerManagerRef.current = null;
+            setPeerManagerState(null);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [roomId, userId]);
+
+    // Effect 2: Sync peers whenever peerIds changes
+    useEffect(() => {
+        const pm = peerManagerRef.current;
+        if (!pm) return;
+
+        const existingPeerIds = Array.from(pm.getAllPeers().keys());
+
+        // Add new peers
+        for (const peerId of peerIds) {
+            if (peerId !== userId && !existingPeerIds.includes(peerId)) {
+                const isInitiator = userId < peerId;
+                pm.createPeer(peerId, isInitiator);
+                console.log(`[VoiceProvider] Created peer ${peerId} (initiator=${isInitiator})`);
+            }
+        }
+
+        // Remove peers that left
+        for (const peerId of existingPeerIds) {
+            if (!peerIds.includes(peerId)) {
+                pm.removePeer(peerId);
+            }
+        }
+    }, [peerIds, userId]);
+
+    // ---------------------------------------------------------------------------
+    // Join Voice (adds audio to existing peer connections)
     // ---------------------------------------------------------------------------
 
     const joinVoice = useCallback(async () => {
@@ -232,57 +270,26 @@ export function VoiceProvider({
                 throw new Error('Failed to get microphone access');
             }
 
-            // 2. Initialize signaling
-            signalingRef.current = new VoiceSignaling({
-                roomId,
-                localUserId: userId,
-                onMessage: handleSignalingMessage,
-            });
-            signalingRef.current.start();
+            // 2. PeerManager already initialized — just add audio track to all peers
+            const pm = peerManagerRef.current;
+            if (pm) {
+                // Ensure track is enabled and replace on all peers
+                track.enabled = true;
+                console.log('[VoiceProvider] Track enabled:', track.enabled, 'readyState:', track.readyState);
 
-            // 3. Initialize PeerManager
-            peerManagerRef.current = new PeerManager({
-                localUserId: userId,
-                onSignalingMessage: async (msg) => {
-                    await signalingRef.current?.send(msg);
-                },
-                onRemoteStream: handleRemoteStream,
-                onRemoteStreamRemoved: handleRemoteStreamRemoved,
-            });
-
-            // 4. Create peers for existing room members
-            // We are the initiator for peers that joined before us
-            for (const peerId of peerIds) {
-                if (peerId !== userId) {
-                    // Simple rule: lower ID initiates
-                    const isInitiator = userId < peerId;
-                    await peerManagerRef.current.createPeer(peerId, isInitiator);
-                }
+                // Small delay then confirm track on all peers
+                setTimeout(() => {
+                    const latestTrack = am.getTrack();
+                    if (pm && latestTrack) {
+                        pm.replaceTrackOnAllPeers(latestTrack);
+                        console.log('[VoiceProvider] Kicked track on all peers');
+                    }
+                }, 500);
             }
-
-            // 5. IMPORTANT: Ensure track is enabled and kick audio
-            // This fixes the issue where audio doesn't flow until mute toggle
-            const currentTrack = am.getTrack();
-            if (currentTrack) {
-                // Force enable the track
-                currentTrack.enabled = true;
-                console.log('[VoiceProvider] Track enabled:', currentTrack.enabled, 'readyState:', currentTrack.readyState);
-            }
-
-            // 6. Small delay then re-confirm track on all peers
-            // This "kicks" the audio to start flowing
-            setTimeout(() => {
-                const pm = peerManagerRef.current;
-                const latestTrack = am.getTrack();
-                if (pm && latestTrack) {
-                    pm.replaceTrackOnAllPeers(latestTrack);
-                    console.log('[VoiceProvider] Kicked track on all peers');
-                }
-            }, 500);
 
             setStatus('connected');
             setIsReady(true);
-            setIsMuted(false); // Ensure UI shows unmuted
+            setIsMuted(false);
 
         } catch (err) {
             const error = err instanceof Error ? err : new Error(String(err));
@@ -297,23 +304,13 @@ export function VoiceProvider({
     // ---------------------------------------------------------------------------
 
     const leaveVoice = useCallback(() => {
-        // Stop signaling
-        signalingRef.current?.stop();
-        signalingRef.current = null;
-
-        // Remove all peers
-        peerManagerRef.current?.dispose();
-        peerManagerRef.current = null;
-
-        // Dispose audio
+        // Only stop audio — PeerManager and signaling stay alive for DataChannels
         audioManagerRef.current?.dispose();
 
-        // Clear state
+        // Clear voice-specific state
         setStatus('disconnected');
         setIsReady(false);
         setIsMuted(false);
-        setConnectedPeers([]);
-        setRemoteStreams(new Map());
         setError(null);
     }, []);
 
@@ -353,34 +350,8 @@ export function VoiceProvider({
         }
     }, []);
 
-    // ---------------------------------------------------------------------------
-    // Handle Peer Changes
-    // ---------------------------------------------------------------------------
-
-    useEffect(() => {
-        const pm = peerManagerRef.current;
-        if (!pm || status !== 'connected') return;
-
-        // Get peers we already have from the manager itself
-        const existingPeerIds = Array.from(pm.getAllPeers().keys());
-
-        // Add new peers (only those we don't already have)
-        for (const peerId of peerIds) {
-            if (peerId !== userId && !existingPeerIds.includes(peerId)) {
-                const isInitiator = userId < peerId;
-                pm.createPeer(peerId, isInitiator);
-            }
-        }
-
-        // Remove peers that left (only those no longer in room)
-        for (const peerId of existingPeerIds) {
-            if (!peerIds.includes(peerId)) {
-                pm.removePeer(peerId);
-            }
-        }
-        // Note: We intentionally don't include connectedPeers to avoid loops
-        // The peerManager internally tracks which peers exist
-    }, [peerIds, userId, status]);
+    // Handle Peer Changes is now integrated into the auto-init effect above
+    // which runs whenever peerIds changes
 
     // ---------------------------------------------------------------------------
     // Context Value
@@ -396,6 +367,7 @@ export function VoiceProvider({
         isNetworkOnline,
         connectedPeers,
         remoteStreams,
+        peerManager: peerManagerState,
         error,
 
         // Actions
