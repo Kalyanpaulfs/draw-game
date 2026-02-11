@@ -13,6 +13,7 @@ import { cn } from "@/lib/game-utils";
 import { SoundEvent } from "@/lib/sound-config";
 import { useSound } from "@/hooks/SoundContext";
 import { useState, useRef, useEffect } from "react";
+import { Send } from "lucide-react";
 
 export default function GameView({ room }: { room: Room }) {
     const { userId, userName } = useUser();
@@ -367,15 +368,23 @@ export default function GameView({ room }: { room: Room }) {
                         <div ref={chatEndRef} />
                     </div>
                     <div className="p-2 border-t border-white/10 bg-slate-800">
-                        <form onSubmit={handleGuess} className="flex gap-1">
+                        <form onSubmit={handleGuess} className="flex gap-2">
                             <input
                                 type="text"
                                 value={guess}
                                 onChange={(e) => setGuess(e.target.value)}
                                 placeholder={isDrawer ? "It's your turn!" : "Type guess here..."}
-                                className="w-full bg-slate-900 border border-white/10 rounded px-2 py-2 text-xs outline-none focus:border-indigo-500 focus:bg-slate-900 transition-colors text-white placeholder-slate-500 font-bold"
+                                className="w-full bg-slate-900 border border-white/10 rounded px-3 py-2 text-xs outline-none focus:border-indigo-500 focus:bg-slate-900 transition-colors text-white placeholder-slate-500 font-bold"
                                 disabled={isDrawer}
                             />
+                            <button
+                                type="submit"
+                                disabled={isDrawer || !guess.trim()}
+                                className="px-3 py-2 bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center shadow-lg shadow-indigo-500/20"
+                                aria-label="Send Guess"
+                            >
+                                <Send className="w-4 h-4" />
+                            </button>
                         </form>
                     </div>
                 </div>
