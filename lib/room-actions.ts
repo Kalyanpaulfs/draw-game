@@ -173,15 +173,60 @@ export async function nextTurn(roomId: string) {
             if (!room.turn) throw "Game not started";
 
             // Prevent double-skip: If we JUST switched to choosing_difficulty and have plenty of time, ignore
+            // Handle Timeout for Choosing Difficulty -> Auto-Select Difficulty
             if (room.turn.phase === "choosing_difficulty") {
                 const timeLeft = room.turn.deadline.toMillis() - Date.now();
-                if (timeLeft > 10000) { // If >10s left, we probably just switched.
-                    return; // Already handled
+                // If >2s left, we probably just switched or haven't timed out.
+                if (timeLeft > 2000) return;
+
+                const difficulties: Difficulty[] = ["easy", "medium", "hard"];
+                const randomDifficulty = difficulties[Math.floor(Math.random() * difficulties.length)];
+                const deadline = Timestamp.fromMillis(Date.now() + 15000);
+
+                transaction.update(roomRef, {
+                    "turn.phase": "choosing_word",
+                    "turn.difficulty": randomDifficulty,
+                    "turn.candidateWords": getRandomWords(3, randomDifficulty, room.usedWords || []),
+                    "turn.deadline": deadline,
+                });
+                return;
+            }
+
+            // Handle Timeout for Choosing Word -> Auto-Select Word
+            if (room.turn.phase === "choosing_word") {
+                const timeLeft = room.turn.deadline.toMillis() - Date.now();
+                // If >2s left, we probably just switched or haven't timed out.
+                if (timeLeft > 2000) return;
+
+                const candidates = room.turn.candidateWords || [];
+                if (candidates.length > 0) {
+                    const randomWord = candidates[Math.floor(Math.random() * candidates.length)];
+                    const deadline = Timestamp.fromMillis(Date.now() + 60000);
+
+                    // Generate hint indices
+                    const hintIndices = Array.from({ length: randomWord.length }, (_, i) => i).sort(() => Math.random() - 0.5);
+
+                    transaction.update(roomRef, {
+                        "turn.phase": "drawing",
+                        "turn.secretWord": randomWord,
+                        "turn.deadline": deadline,
+                        "turn.candidateWords": [],
+                        "turn.correctGuessers": [],
+                        "turn.scores": {},
+                        "turn.hintIndices": hintIndices,
+                        usedWords: [...(room.usedWords || []), randomWord],
+                    });
+                    return;
                 }
             }
 
             // NEW: Transition to Revealing Phase if currently Drawing
             if (room.turn.phase === "drawing") {
+                const timeLeft = room.turn.deadline.toMillis() - Date.now();
+                // If there IS significant time left (>2s), assume we just switched phases or are still playing.
+                // Exception: If everyone guessed, deadline is 0, so timeLeft < 0, so proceed!
+                if (timeLeft > 2000) return;
+
                 const revealDeadline = Timestamp.fromMillis(Date.now() + 3000); // 3s reveal
                 transaction.update(roomRef, {
                     "turn.phase": "revealing",
