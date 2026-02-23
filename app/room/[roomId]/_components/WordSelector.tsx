@@ -71,21 +71,21 @@ export function WordSelector({ room }: { room: Room }) {
                             disabled={loading}
                             className="py-4 text-xl font-bold bg-green-900/50 hover:bg-green-800 border border-green-700 text-green-200 rounded-lg hover:border-green-400 transition-all hover:scale-105"
                         >
-                            Easy (3-4 letters)
+                            Easy
                         </button>
                         <button
                             onClick={() => handleSelectDifficulty("medium")}
                             disabled={loading}
                             className="py-4 text-xl font-bold bg-yellow-900/50 hover:bg-yellow-800 border border-yellow-700 text-yellow-200 rounded-lg hover:border-yellow-400 transition-all hover:scale-105"
                         >
-                            Medium (5-7 letters)
+                            Medium
                         </button>
                         <button
                             onClick={() => handleSelectDifficulty("hard")}
                             disabled={loading}
                             className="py-4 text-xl font-bold bg-red-900/50 hover:bg-red-800 border border-red-700 text-red-200 rounded-lg hover:border-red-400 transition-all hover:scale-105"
                         >
-                            Hard (8+ letters)
+                            Hard
                         </button>
                     </div>
                 </div>
