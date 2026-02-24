@@ -1,4 +1,4 @@
-import { doc, setDoc, getDoc, updateDoc, Timestamp, runTransaction, collection, getDocs, writeBatch, addDoc, deleteField, DocumentData } from "firebase/firestore";
+import { doc, setDoc, getDoc, updateDoc, Timestamp, runTransaction, collection, getDocs, writeBatch, addDoc, deleteField, DocumentData, query, where, deleteDoc } from "firebase/firestore";
 
 import { db } from "./firebase";
 import { Room, GameConfig, Player, Difficulty } from "./types";
@@ -32,6 +32,7 @@ export async function createRoom(hostId: string, hostName: string, config: GameC
         playerOrder: [],
         usedWords: [],
         createdAt: Timestamp.now(),
+        lastActivityAt: Timestamp.now(),
     };
 
     await setDoc(roomRef, newRoom);
@@ -86,7 +87,10 @@ export async function joinRoom(roomId: string, userId: string, userName: string)
             }
 
             const players = { ...freshData.players, [userId]: newPlayer };
-            transaction.update(roomRef, { players });
+            transaction.update(roomRef, {
+                players,
+                lastActivityAt: Timestamp.now()
+            });
         });
         return { success: true };
     } catch (e) {
@@ -141,6 +145,7 @@ export async function startGame(roomId: string) {
             correctGuessers: [],
             scores: {},
         },
+        lastActivityAt: Timestamp.now(),
     });
 
     // Send "Starting Round 1" message
@@ -188,6 +193,7 @@ export async function nextTurn(roomId: string) {
                     "turn.difficulty": randomDifficulty,
                     "turn.candidateWords": getRandomWords(3, randomDifficulty, room.usedWords || []),
                     "turn.deadline": deadline,
+                    lastActivityAt: Timestamp.now(),
                 });
                 return;
             }
@@ -215,6 +221,7 @@ export async function nextTurn(roomId: string) {
                         "turn.scores": {},
                         "turn.hintIndices": hintIndices,
                         usedWords: [...(room.usedWords || []), randomWord],
+                        lastActivityAt: Timestamp.now(),
                     });
                     return;
                 }
@@ -230,7 +237,8 @@ export async function nextTurn(roomId: string) {
                 const revealDeadline = Timestamp.fromMillis(Date.now() + 3000); // 3s reveal
                 transaction.update(roomRef, {
                     "turn.phase": "revealing",
-                    "turn.deadline": revealDeadline
+                    "turn.deadline": revealDeadline,
+                    lastActivityAt: Timestamp.now(),
                 });
                 return;
             }
@@ -281,7 +289,8 @@ export async function nextTurn(roomId: string) {
                     secretWord: "",
                     correctGuessers: [],
                     scores: {},
-                }
+                },
+                lastActivityAt: Timestamp.now(),
             });
 
             // Set message metadata for deterministic ID
@@ -304,12 +313,13 @@ export async function nextTurn(roomId: string) {
             const msgId = `round_${msgMeta.round}_${msgMeta.drawerId}`;
             await setDoc(doc(messagesRef, msgId), messageToSend);
         }
-    } catch (e: any) {
+    } catch (e: unknown) {
+        const error = e as { code?: string; message?: string };
         // If precondition failed, it means the document changed under us (likely another client triggered nextTurn).
         // This is expected in a distributed system with optimistic UI. We can safely ignore it if the outcome
         // is what we wanted (turn advanced), or just log it as a non-fatal warning.
-        if (e.code === 'failed-precondition' || e.code === 'aborted') {
-            console.warn("nextTurn transaction contention (likely harmless race condition):", e.message);
+        if (error.code === 'failed-precondition' || error.code === 'aborted') {
+            console.warn("nextTurn transaction contention (likely harmless race condition):", error.message);
             return;
         }
         throw e;
@@ -425,7 +435,7 @@ export async function submitGuess(roomId: string, userId: string, userName: stri
                 const currentScore = room.players[userId]?.score || 0;
                 const drawerScore = room.players[room.turn.drawerId]?.score || 0;
 
-                const updates: Record<string, any> = {
+                const updates: Record<string, string | number | string[] | Timestamp | Record<string, number>> = {
                     [`players.${userId}.score`]: currentScore + points,
                     [`players.${room.turn.drawerId}.score`]: drawerScore + drawerIncrement,
                     "turn.correctGuessers": newCorrectGuessers,
@@ -457,6 +467,7 @@ export async function submitGuess(roomId: string, userId: string, userName: stri
                     });
                 }
 
+                updates.lastActivityAt = Timestamp.now();
                 transaction.update(roomRef, updates);
 
             } else {
@@ -520,7 +531,7 @@ export async function resetGame(roomId: string) {
         if (!roomSnap.exists()) throw "Room not found";
         const room = roomSnap.data() as Room;
 
-        const updates: Record<string, any> = {
+        const updates: Record<string, string | number | boolean | null | string[] | Timestamp> = {
             status: "waiting",
             currentRound: 1,
             turn: null,
@@ -535,6 +546,7 @@ export async function resetGame(roomId: string) {
             updates[`players.${pid}.isReady`] = false;
         });
 
+        updates.lastActivityAt = Timestamp.now();
         transaction.update(roomRef, updates);
     });
 
@@ -563,7 +575,8 @@ export async function toggleReady(roomId: string, userId: string) {
         const newReadyState = !player.isReady;
 
         transaction.update(roomRef, {
-            [`players.${userId}.isReady`]: newReadyState
+            [`players.${userId}.isReady`]: newReadyState,
+            lastActivityAt: Timestamp.now()
         });
     });
 }
@@ -580,7 +593,7 @@ export async function leaveRoom(roomId: string, userId: string) {
         if (remainingPlayers.length === 0) {
             transaction.delete(roomRef);
         } else {
-            const updates: any = {
+            const updates: Record<string, string | DocumentData | ReturnType<typeof deleteField> | Timestamp> = {
                 [`players.${userId}`]: deleteField()
             };
 
@@ -589,6 +602,7 @@ export async function leaveRoom(roomId: string, userId: string) {
             }
             // If user was ready, maybe we don't need to do anything else, logic handles it.
 
+            updates.lastActivityAt = Timestamp.now();
             transaction.update(roomRef, updates);
         }
     });
@@ -614,7 +628,7 @@ export async function kickPlayer(roomId: string, targetUserId: string, hostId: s
 
         if (!room.players[targetUserId]) return; // Player already gone
 
-        const updates: any = {
+        const updates: Record<string, ReturnType<typeof deleteField>> = {
             [`players.${targetUserId}`]: deleteField()
         };
 
@@ -643,6 +657,67 @@ export async function updateRoomConfig(roomId: string, config: Partial<GameConfi
         if (newConfig.rounds < 1) newConfig.rounds = 1;
         if (newConfig.rounds > 10) newConfig.rounds = 10;
 
-        transaction.update(roomRef, { config: newConfig });
+        transaction.update(roomRef, {
+            config: newConfig,
+            lastActivityAt: Timestamp.now()
+        });
     });
+}
+
+export async function cleanupStaleRooms() {
+    try {
+        const now = Date.now();
+        const thirtyMinutesAgo = Timestamp.fromMillis(now - 30 * 60 * 1000);
+        const twoHoursAgo = Timestamp.fromMillis(now - 2 * 60 * 1000 * 60);
+
+        const roomsRef = collection(db, "rooms");
+
+        // Single query on createdAt to avoid composite index requirement.
+        // We fetch everything older than 30 mins and filter the rest in memory.
+        const cleanupQuery = query(
+            roomsRef,
+            where("createdAt", "<", thirtyMinutesAgo)
+        );
+
+        const querySnap = await getDocs(cleanupQuery);
+        const roomIdsToDelete = new Set<string>();
+
+        querySnap.docs.forEach((docSnap) => {
+            const data = docSnap.data();
+            const activity = data.lastActivityAt || data.createdAt;
+            const status = data.status;
+            const activityMillis = activity.toMillis();
+
+            // 1. Delete if finished and idle for 30 mins
+            if (status === "finished" && activityMillis < thirtyMinutesAgo.toMillis()) {
+                roomIdsToDelete.add(docSnap.id);
+            }
+            // 2. Delete if any room is idle for 2 hours
+            else if (activityMillis < twoHoursAgo.toMillis()) {
+                roomIdsToDelete.add(docSnap.id);
+            }
+        });
+
+        if (roomIdsToDelete.size === 0) return;
+
+        console.log(`Cleaning up ${roomIdsToDelete.size} stale/legacy rooms...`);
+
+        for (const roomId of roomIdsToDelete) {
+            // 1. Delete messages subcollection
+            const messagesRef = collection(db, "rooms", roomId, "messages");
+            const messagesSnap = await getDocs(messagesRef);
+            if (!messagesSnap.empty) {
+                const batch = writeBatch(db);
+                messagesSnap.docs.forEach(d => batch.delete(d.ref));
+                await batch.commit();
+            }
+
+            // 2. Delete the room document
+            await deleteDoc(doc(db, "rooms", roomId));
+        }
+
+        console.log("Cleanup complete.");
+    } catch (error) {
+        console.error("Cleanup error:", error);
+    }
 }

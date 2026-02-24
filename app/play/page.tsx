@@ -6,8 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@/hooks/useUser";
 import { createRoom, joinRoom } from "@/lib/room-actions";
 import { cn } from "@/lib/game-utils";
+import { useCleanup } from "@/hooks/useCleanup";
 
 function PlayPageContent() {
+    useCleanup();
     const router = useRouter();
     const searchParams = useSearchParams();
     const { userId, userName, saveName } = useUser();

@@ -43,4 +43,5 @@ export type Room = {
     playerOrder: string[];
     usedWords: string[];
     createdAt: Timestamp;
+    lastActivityAt: Timestamp;
 };
