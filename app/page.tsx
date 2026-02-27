@@ -5,6 +5,7 @@ import { cn } from "@/lib/game-utils";
 import { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import { Users, Search, PenTool, Trophy, ArrowRight } from "lucide-react";
+import { PublicLobbies } from "@/components/PublicLobbies";
 
 function GameFlowGallery() {
   const slides = [
@@ -167,6 +168,8 @@ function LandingPageContent() {
               Join Room
             </Link>
           </div>
+
+          <PublicLobbies />
         </section>
 
         {/* HOW IT WORKS */}

@@ -26,8 +26,14 @@ function PlayPageContent() {
     useEffect(() => {
         setMounted(true);
         const tab = searchParams.get("tab");
+        const roomQuery = searchParams.get("roomId");
+
         if (tab === "join") {
             setActiveTab("join");
+        }
+        if (roomQuery) {
+            setRoomId(roomQuery.toUpperCase());
+            setActiveTab("join"); // Force join tab if we have a room ID
         }
     }, [searchParams]);
 

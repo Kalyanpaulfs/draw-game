@@ -175,7 +175,8 @@ export async function nextTurn(roomId: string) {
 
             const room = roomSnap.data() as Room;
 
-            if (!room.turn) throw "Game not started";
+            // If game is finished or hasn't started, simply return instead of throwing an unhandled error
+            if (!room.turn) return;
 
             // Prevent double-skip: If we JUST switched to choosing_difficulty and have plenty of time, ignore
             // Handle Timeout for Choosing Difficulty -> Auto-Select Difficulty
