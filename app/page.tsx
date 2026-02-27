@@ -110,9 +110,9 @@ function LandingPageContent() {
         </div>
       </header>
 
-      <main className="relative z-10">
+      <main className="relative z-10 w-full overflow-x-hidden">
         {/* HERO SECTION */}
-        <section className="relative min-h-[100dvh] flex flex-col items-center justify-center px-6 text-center max-w-5xl mx-auto pt-0 pb-10 -mt-20 md:mt-0">
+        <section className="relative min-h-screen flex flex-col items-center justify-center px-6 text-center max-w-5xl mx-auto pt-32 pb-24 md:pt-40 md:pb-32">
 
           {/* Dynamic Background Elements */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
@@ -168,8 +168,9 @@ function LandingPageContent() {
               Join Room
             </Link>
           </div>
-
-          <PublicLobbies />
+          <div className="w-full mt-24">
+            <PublicLobbies />
+          </div>
         </section>
 
         {/* HOW IT WORKS */}
