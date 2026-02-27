@@ -713,7 +713,16 @@ export async function cleanupStaleRooms() {
                 await batch.commit();
             }
 
-            // 2. Delete the room document
+            // 2. Delete signaling subcollection
+            const signalingRef = collection(db, "rooms", roomId, "signaling");
+            const signalingSnap = await getDocs(signalingRef);
+            if (!signalingSnap.empty) {
+                const batch = writeBatch(db);
+                signalingSnap.docs.forEach(d => batch.delete(d.ref));
+                await batch.commit();
+            }
+
+            // 3. Delete the room document
             await deleteDoc(doc(db, "rooms", roomId));
         }
 
