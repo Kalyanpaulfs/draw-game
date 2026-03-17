@@ -43,6 +43,10 @@ function PlayPageContent() {
             setError("Please enter your name");
             return;
         }
+        if (!userId) {
+            setError("Establishing secure connection...");
+            return;
+        }
         setLoading(true);
         setError("");
 

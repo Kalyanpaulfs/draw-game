@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { v4 as uuidv4 } from "uuid";
+import { auth } from "@/lib/firebase";
+import { signInAnonymously, onAuthStateChanged } from "firebase/auth";
 
-export const USER_ID_KEY = "draw_game_user_id";
 export const USER_NAME_KEY = "draw_game_user_name";
 
 export function useUser() {
@@ -11,19 +11,27 @@ export function useUser() {
     const [userName, setUserName] = useState<string>("");
 
     useEffect(() => {
-        let storedId = localStorage.getItem(USER_ID_KEY);
-        if (!storedId) {
-            storedId = uuidv4();
-            localStorage.setItem(USER_ID_KEY, storedId);
-        }
-        // eslint-disable-next-line
-        setUserId(storedId);
+        // 1. Handle Anonymous Auth
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                setUserId(user.uid);
+            } else {
+                try {
+                    const userCredential = await signInAnonymously(auth);
+                    setUserId(userCredential.user.uid);
+                } catch (error) {
+                    console.error("Error signing in anonymously:", error);
+                }
+            }
+        });
 
+        // 2. Handle Display Name
         const storedName = localStorage.getItem(USER_NAME_KEY);
         if (storedName) {
-             
             setUserName(storedName);
         }
+
+        return () => unsubscribe();
     }, []);
 
     const saveName = (name: string) => {
