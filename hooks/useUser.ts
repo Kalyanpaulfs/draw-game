@@ -9,21 +9,25 @@ export const USER_NAME_KEY = "draw_game_user_name";
 export function useUser() {
     const [userId, setUserId] = useState<string>("");
     const [userName, setUserName] = useState<string>("");
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // 1. Handle Anonymous Auth
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 setUserId(user.uid);
+                setLoading(false);
             } else {
                 try {
                     const userCredential = await signInAnonymously(auth);
                     setUserId(userCredential.user.uid);
                 } catch (error) {
                     console.error("Error signing in anonymously:", error);
+                } finally {
+                    setLoading(false);
                 }
             }
         });
+// ... rest of the hook
 
         // 2. Handle Display Name
         const storedName = localStorage.getItem(USER_NAME_KEY);

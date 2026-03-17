@@ -57,9 +57,9 @@ function PlayPageContent() {
                 isPublic,
             });
             router.push(`/room/${id}`);
-        } catch (err) {
-            setError("Failed to create room.");
-            console.error(err);
+        } catch (err: any) {
+            console.error("Create Room Error:", err);
+            setError(`Failed to create room: ${err.message || err.code || "Unknown error"}`);
         } finally {
             setLoading(false);
         }

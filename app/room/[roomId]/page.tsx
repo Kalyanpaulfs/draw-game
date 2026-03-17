@@ -59,6 +59,10 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
             setJoinError("Enter a name");
             return;
         }
+        if (!userId) {
+            setJoinError("Establishing secure connection...");
+            return;
+        }
         setIsJoining(true);
         setJoinError("");
 
@@ -66,6 +70,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
         const res = await joinRoom(roomId, userId, joinName);
         if (!res.success) {
             setJoinError(res.message || "Failed to join");
+            console.error("Join Error:", res);
         }
         setIsJoining(false);
     };
@@ -263,7 +268,12 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
                     onClose={() => setShowLeaveModal(false)}
                     onConfirm={() => {
                         import("@/lib/room-actions").then(mod => {
-                            mod.leaveRoom(roomId, userId).then(() => router.push("/"));
+                            mod.leaveRoom(roomId, userId)
+                                .then(() => router.push("/"))
+                                .catch((err) => {
+                                    alert(`Failed to leave: ${err.message}`);
+                                    console.error("Leave error:", err);
+                                });
                         });
                     }}
                 />
